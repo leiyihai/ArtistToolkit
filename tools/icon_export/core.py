@@ -13,14 +13,16 @@ __all__ = ["CROP_TYPES", "process_batch"]
 # ---------- 配置 ----------
 # 裁切类型:key -> 中文显示名(输出目录用 key,英文,文件系统安全)
 CROP_TYPES = {
+    "original": "无(直接缩放)",
+    "square": "方形",
     "circle": "正圆",
     "rounded_square": "圆角方形",
-    "square": "方形",
-    "original": "无(直接缩放)",
 }
 
 MAX_MATTING_PIXELS = 3_000_000  # 超过此像素数禁用 alpha_matting,防内存溢出
 CORNER_RADIUS_RATIO = 0.14      # 圆角半径 = 输出边长 * 0.14(128px 时约 18px,视觉一致)
+CORNER_RATIO_MIN = 0.01         # 圆角半径比例下限(1%)
+CORNER_RATIO_MAX = 0.50         # 圆角半径比例上限(50%)
 SCALE_RATIO = 1.08              # 放大比例,消除裁切边缘少量镂空/半透明
 MIN_ICON_PIXELS = 500           # 小于该像素数的连通域视为噪声
 MIN_ICON_EDGE = 30              # 宽或高小于该值视为细条噪声
@@ -55,9 +57,13 @@ def is_transparent(img):
 
 # ---------- 拆图标 ----------
 def split_by_gaps(mask):
-    # ponytail: 规则网格假设——检测贯穿行/列的投影谷底切分。
-    # 非规则排列(错位/斜排)的图标集无法切分,需时换基于形态学/模板的算法。
-    """按行列投影缝隙把 mask 切成网格子块,返回局部 (x1,y1,x2,y2) 列表"""
+    # ponytail: 穿透判定——谷底必须接近全透明才算网格间隙;
+    # 仅凭投影相对低会误切图标内部空隙(圆润表情包/镂空图标)。
+    # 需要更精确切分(不规则排列/斜排)时换基于形态学的算法。
+    """按行列投影缝隙把 mask 切成网格子块,返回局部 (x1,y1,x2,y2) 列表。
+
+    分隔线要求整行/列穿透(投影接近 0),图标内部空隙投影虽低但不切。
+    """
     import numpy as np
     from scipy.signal import find_peaks
     h, w = mask.shape
@@ -65,10 +71,11 @@ def split_by_gaps(mask):
     cs = mask.sum(axis=0)
     if rs.max() == 0:
         return []
+    gap_thresh = max(1.0, 0.02 * max(rs.max(), cs.max()))  # 穿透阈值:谷底须低于此行/列峰值的 2%
     rv, _ = find_peaks(-rs, prominence=rs.max() * 0.1, width=2)
     cv, _ = find_peaks(-cs, prominence=cs.max() * 0.1, width=2)
-    rows = [0] + [int(v) for v in rv] + [h]
-    cols = [0] + [int(v) for v in cv] + [w]
+    rows = [0] + [int(v) for v in rv if rs[v] <= gap_thresh] + [h]
+    cols = [0] + [int(v) for v in cv if cs[v] <= gap_thresh] + [w]
     blocks = []
     for i in range(len(rows) - 1):
         for j in range(len(cols) - 1):
@@ -90,10 +97,13 @@ def segment_icons(img):
     mask = alpha > 10
     labeled, num = ndimage.label(mask)
     sizes = ndimage.sum(mask, labeled, range(1, num + 1))
+    max_size = float(sizes.max()) if num else 0.0
 
     boxes = []
     for i in range(1, num + 1):
-        if sizes[i - 1] < MIN_ICON_PIXELS:
+        # 绝对阈值 + 相对主块比例:滤掉抠图残渣(如 ~1k 像素小碎块)
+        # ponytail: 按最大块 2% 过滤,图标集近似等大时安全;含极小真图标时需按内容再判
+        if sizes[i - 1] < MIN_ICON_PIXELS or (max_size and sizes[i - 1] < 0.02 * max_size):
             continue
         ys, xs = np.where(labeled == i)
         x1, y1, x2, y2 = xs.min(), ys.min(), xs.max(), ys.max()
@@ -133,7 +143,7 @@ def _fit_square(img, size):
     return resized.crop((l, t, l + size, t + size))
 
 
-def _shape_mask(size, mode):
+def _shape_mask(size, mode, radius_ratio=CORNER_RADIUS_RATIO):
     """4x 超采样抗锯齿蒙版:mode = circle | rounded_square。"""
     up = 4
     m = Image.new("L", (size * up, size * up), 0)
@@ -142,11 +152,11 @@ def _shape_mask(size, mode):
         d.ellipse((0, 0, size * up, size * up), fill=255)
     else:
         d.rounded_rectangle((0, 0, size * up, size * up),
-                            radius=max(1, int(size * up * CORNER_RADIUS_RATIO)), fill=255)
+                            radius=max(1, int(size * up * radius_ratio)), fill=255)
     return m.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def crop_icon(img, crop_type, size):
+def crop_icon(img, crop_type, size, corner_ratio=CORNER_RADIUS_RATIO):
     """按形状裁切并缩放到 size×size,返回新 RGBA 图。"""
     if crop_type == "original":
         # 无(直接缩放):等比缩放,最长边撑满 size,居中贴透明画布,不裁切形状
@@ -161,7 +171,7 @@ def crop_icon(img, crop_type, size):
     if crop_type == "square":
         return square
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    out.paste(square, (0, 0), _shape_mask(size, crop_type))
+    out.paste(square, (0, 0), _shape_mask(size, crop_type, corner_ratio))
     return out
 
 
@@ -196,16 +206,20 @@ def normalize_icon(img, target_ratio=0.5):
 
 
 # ---------- 主流程 ----------
-def process_batch(paths, crop_type, sizes, out_dir, normalize=False, log=print):
+def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_ratio=None, log=print):
     """逐张:抠图 → 拆图标 → 按类型/尺寸裁切保存。
 
     输出结构:
         out_dir/icons/                 拆分出的原始图标(原尺寸)
         out_dir/<类型>/<尺寸>/xxx_N.png  裁切结果
     normalize=True 时,裁切结果再统一图标视觉大小(normalize_icons 逻辑)。
+    corner_ratio:圆角半径比例(仅 rounded_square 生效),自动限制在 [CORNER_RATIO_MIN, CORNER_RATIO_MAX]。
     """
     if crop_type not in CROP_TYPES:
         raise ValueError(f"未知裁切类型: {crop_type}")
+    if corner_ratio is None:
+        corner_ratio = CORNER_RADIUS_RATIO
+    corner_ratio = min(max(corner_ratio, CORNER_RATIO_MIN), CORNER_RATIO_MAX)  # ponytail: clamp 即边界防御,前端限制 + 后端兜底
     os.makedirs(out_dir, exist_ok=True)
     icons_dir = os.path.join(out_dir, "icons")
     os.makedirs(icons_dir, exist_ok=True)
@@ -229,7 +243,7 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, log=print):
                 bname = f"{base}_{i}"
                 icon.save(os.path.join(icons_dir, bname + ".png"))
                 for size in sizes:
-                    out = crop_icon(icon, crop_type, size)
+                    out = crop_icon(icon, crop_type, size, corner_ratio)
                     if normalize:
                         out = normalize_icon(out)
                     sub = os.path.join(out_dir, crop_type, str(size))
@@ -257,6 +271,10 @@ def selftest():
     corner = crop_icon(icons[0], "circle", 128).getpixel((0, 0))
     if corner[3] != 0:
         return False, "圆形蒙版角落应透明"
+    # 圆角参数:边界值也应产出正确尺寸(半径比例 clamp 由 process_batch 负责)
+    for r in (0.01, 0.5):
+        rs = crop_icon(icons[0], "rounded_square", 128, corner_ratio=r)
+        assert rs.size == (128, 128), (r, rs.size)
     # original(无)应保持内容比例:宽高比不变
     w, h = icons[0].size
     org = crop_icon(icons[0], "original", 128)
