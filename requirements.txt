@@ -1,0 +1,7 @@
+# 运行时依赖(打包后的 exe 已内置,无需他人安装)
+rembg>=2.0.76
+onnxruntime>=1.27.0      # CPU 通用;有 NVIDIA GPU 可换成 onnxruntime-gpu
+scipy>=1.14.0
+Pillow>=11.0.0
+numpy>=1.26.0
+tkinterdnd2>=0.4.3       # 界面拖放图片支持
