@@ -16,7 +16,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-首次抠图会自动下载 AI 模型(约 180MB,缓存于 `~/.u2net`)。
+首次抠图会自动下载 AI 模型(约 1GB,缓存于 `~/.u2net`;也可手动把模型文件放到该目录跳过下载)。
 
 ## 使用
 

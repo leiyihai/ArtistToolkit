@@ -28,20 +28,22 @@ MIN_ICON_EDGE = 30              # 宽或高小于该值视为细条噪声
 
 # ---------- 抠图(懒加载 rembg,首次调用才下载/加载模型) ----------
 _session = None
+_remove_fn = None
 
 
 def matting(img):
     """用 BiRefNet 去除背景,返回新 RGBA 图。"""
-    global _session
+    global _session, _remove_fn
     if _session is None:
         from rembg import remove, new_session
+        _remove_fn = remove  # 必须缓存到全局,否则第二次调用 remove 是未绑定局部变量
         _session = new_session("birefnet-general")
     w, h = img.size
     use_matting = w * h <= MAX_MATTING_PIXELS
-    return remove(img, session=_session, alpha_matting=use_matting,
-                  alpha_matting_foreground_threshold=230,
-                  alpha_matting_background_threshold=20,
-                  alpha_matting_erode_size=5)
+    return _remove_fn(img, session=_session, alpha_matting=use_matting,
+                      alpha_matting_foreground_threshold=230,
+                      alpha_matting_background_threshold=20,
+                      alpha_matting_erode_size=5)
 
 
 def is_transparent(img):
@@ -218,7 +220,7 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, log=print):
             if is_transparent(img):
                 log("  跳过抠图(已是透明背景)")
             else:
-                log("  抠图中…(首次运行需下载约 180MB 模型,请耐心等待)")
+                log("  抠图中…(首次运行需下载约 1GB 模型,请耐心等待)")
                 img = matting(img)
 
             icons = segment_icons(img)

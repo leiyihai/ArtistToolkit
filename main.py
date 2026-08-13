@@ -186,7 +186,7 @@ class ExportPage(ttk.Frame):
         bar = ttk.Frame(self)
         bar.pack(fill="x", pady=(0, 8))
         self.run_btn = ttk.Button(bar, text="▶ 运行", command=self._start)
-        self.run_btn.pack(side="left")
+        self.run_btn.pack(side="right")
         self.progress = ttk.Progressbar(bar, mode="indeterminate")
         self.progress.pack(side="left", fill="x", expand=True, padx=10)
 
