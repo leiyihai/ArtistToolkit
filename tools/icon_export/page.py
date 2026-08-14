@@ -1,4 +1,4 @@
-"""批量图标导出 TAB 页:拖图 → 抠图拆图标 → 按形状/尺寸裁切输出。
+"""图标批处理 TAB 页:拖图 → 抠图拆图标 → 按形状/尺寸裁切输出。
 
 ⚠ 旧版 Tkinter 界面(过渡期保留)。Electron 新版界面见同目录 frontend/view.js。
 本文件是 tools.icon_export 功能的界面层,core 为无界面核心逻辑。

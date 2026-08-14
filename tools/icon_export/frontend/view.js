@@ -1,4 +1,4 @@
-// 批量图标导出 TAB 页(Electron renderer)
+// 图标批处理 TAB 页(Electron renderer)
 // 与 tools/icon_export/core.py(经 backend.py stdio 服务)联调。
 window.__PAGES__ = window.__PAGES__ || [];
 
@@ -15,7 +15,7 @@ const CORNER_DEFAULT = 18;  // 默认 18px(≈ 14% × 128)
 
 window.__PAGES__.push({
   id: 'icon-export',
-  title: '批量图标导出',
+  title: '图标批处理',
 
   mount(container) {
     let files = []; // {path, url, name}
@@ -24,7 +24,7 @@ window.__PAGES__.push({
 
     container.innerHTML = `
       <div class="page-head">
-        <h1>批量图标导出</h1>
+        <h1>图标批处理</h1>
         <p>拖入图片 → 抠图去背景 → 拆分为独立图标 → 按形状与尺寸裁切输出</p>
       </div>
       <div class="card">

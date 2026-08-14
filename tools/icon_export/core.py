@@ -1,4 +1,4 @@
-"""批量图标导出核心逻辑:抠图 → 拆图标 → 按形状/尺寸裁切输出。
+"""图标批处理核心逻辑:抠图 → 拆图标 → 按形状/尺寸裁切输出。
 
 提炼自 run.py(抠图+拆分)与 crop_to_circle / crop_to_rounded_square / crop_to_square(裁切)。
 GUI 不直接依赖本模块之外的脚本。

@@ -62,7 +62,7 @@ class Sidebar(tk.Frame):
 # ---------- 页签注册 ----------
 def build_pages(sidebar):
     page = ExportPage(sidebar.content)
-    sidebar.add_page("批量图标导出", page)
+    sidebar.add_page("图标批处理", page)
 
 
 def main():
