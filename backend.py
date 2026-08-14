@@ -28,6 +28,8 @@ from tools.image_resize.core import process as resize_process, selftest as resiz
 # 预热:主线程完成重量级依赖的首次 import(懒加载的 numpy/scipy/rembg 若在请求线程首次加载会卡死)
 import numpy  # noqa: E402
 import scipy  # noqa: E402
+import scipy.ndimage  # noqa: E402  (icon_export 拆图标用)
+import scipy.signal  # noqa: E402    (icon_export 网格切分用)
 import rembg  # noqa: E402
 
 _lock = threading.Lock()      # stdout 多线程写入互斥
