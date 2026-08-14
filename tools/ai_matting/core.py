@@ -36,11 +36,11 @@ def _ensure_model(log=None):
                 read += len(chunk)
                 pct = int(read / total * 100)
                 if log and pct // 10 > last_pct // 10:
-                    log(f"加载模型: {min(pct, 100)}%")
+                    log(f"⏳ 加载模型: {min(pct, 100)}%")  # ⏳ 前缀=前端原地更新此行
                 last_pct = pct
         return
     if log:
-        log("模型未找到,开始下载(约 927MB)…")
+        log("⏳ 下载模型: 0%")
     import urllib.request
     req = urllib.request.Request(_MODEL_URL, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=60) as resp, open(path, "wb") as f:
@@ -53,10 +53,10 @@ def _ensure_model(log=None):
             if total:
                 pct = int(got / total * 100)
                 if log and pct // 5 > last_pct // 5:
-                    log(f"下载模型: {min(pct, 100)}%")
+                    log(f"⏳ 下载模型: {min(pct, 100)}%")
                 last_pct = pct
     if log:
-        log("下载完成")
+        log("⏳ 下载完成")
 
 
 def matting(img, log=None):
@@ -67,6 +67,8 @@ def matting(img, log=None):
         from rembg import remove, new_session
         _remove_fn = remove  # 必须缓存到全局,否则第二次调用 remove 是未绑定局部变量
         _session = new_session("birefnet-general")
+    if log:
+        log("  抠图中…(CPU 处理较慢,每张约 1 分钟)")
     # ponytail: 关闭 alpha_matting——pymatting 后处理在大图上极慢(1024² 卡 3 分钟+),
     # 抠图对边缘 alpha 要求低,关闭后约 19s 完成且质量可接受;需发丝级精细边缘时再开启。
     return _remove_fn(img, session=_session)
@@ -98,8 +100,7 @@ def process_batch(paths, out_dir, log=print, progress=None):
             if is_transparent(img):
                 log("  跳过(已是透明背景)")
                 continue
-            log("  抠图中…(CPU 处理较慢,每张约 1 分钟;首次加载模型更久,请耐心等待)")
-            img = matting(img, log=log)
+            img = matting(img, log=log)  # 模型加载进度 + 抠图提示在 matting 内输出
             save_path = os.path.join(out_dir, base + ".png")
             img.save(save_path, "PNG")
             log(f"  → {os.path.basename(save_path)}")

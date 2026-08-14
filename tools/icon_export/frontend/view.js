@@ -130,8 +130,18 @@ window.__PAGES__.push({
       norm.classList.toggle('active', state.normalize);
     });
 
+    let lastProgress = false;  // 上一行是否为进度行(⏳ 前缀=原地更新)
     const log = (msg, cls) => {
-      logEl.textContent += (logEl.textContent === '就绪。' ? '' : '\n') + msg;
+      const isProg = msg.startsWith('⏳');
+      const text = isProg ? msg.slice(1) : msg;
+      if (isProg && lastProgress) {
+        const lines = logEl.textContent.split('\n');
+        lines[lines.length - 1] = text;
+        logEl.textContent = lines.join('\n');
+      } else {
+        logEl.textContent += (logEl.textContent === '就绪。' ? '' : '\n') + text;
+      }
+      lastProgress = isProg;
       logEl.className = 'log' + (cls ? ' ' + cls : '');
       logEl.scrollTop = logEl.scrollHeight;
     };
