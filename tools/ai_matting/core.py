@@ -9,7 +9,6 @@ from PIL import Image
 
 __all__ = ["process_batch"]
 
-MAX_MATTING_PIXELS = 3_000_000  # 超过此像素数禁用 alpha_matting,防内存溢出
 
 
 # ---------- 抠图(懒加载 rembg,首次调用才下载/加载模型) ----------
@@ -24,12 +23,9 @@ def matting(img):
         from rembg import remove, new_session
         _remove_fn = remove  # 必须缓存到全局,否则第二次调用 remove 是未绑定局部变量
         _session = new_session("birefnet-general")
-    w, h = img.size
-    use_matting = w * h <= MAX_MATTING_PIXELS
-    return _remove_fn(img, session=_session, alpha_matting=use_matting,
-                      alpha_matting_foreground_threshold=230,
-                      alpha_matting_background_threshold=20,
-                      alpha_matting_erode_size=5)
+    # ponytail: 关闭 alpha_matting——pymatting 后处理在大图上极慢(1024² 卡 3 分钟+),
+    # 抠图对边缘 alpha 要求低,关闭后约 19s 完成且质量可接受;需发丝级精细边缘时再开启。
+    return _remove_fn(img, session=_session)
 
 
 def is_transparent(img):
