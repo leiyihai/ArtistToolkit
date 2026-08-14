@@ -132,7 +132,7 @@ window.__PAGES__.push({
       progress.classList.add('indeterminate');
       log(`开始: ${files.length} 张图 · 输出到 ${out}`);
       try {
-        await window.api.call('process_batch', {
+        await window.api.call('matting_process', {
           paths: files.map(f => f.path),
           out,
         });

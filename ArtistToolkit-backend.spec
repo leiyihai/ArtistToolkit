@@ -4,7 +4,7 @@
 from PyInstaller.utils.hooks import copy_metadata
 
 a = Analysis(
-    ['tools/icon_export/backend.py'],
+    ['backend.py'],
     pathex=['.'],
     binaries=[],
     datas=(

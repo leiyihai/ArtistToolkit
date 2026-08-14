@@ -148,7 +148,7 @@ window.__PAGES__.push({
       bar.style.width = '0%';
       log(`开始: ${inputDir} → ${out} · 目标 ${w}×${h}`);
       try {
-        await window.api.call('process', { input: inputDir, output: out, width: w, height: h });
+        await window.api.call('resize_process', { input: inputDir, output: out, width: w, height: h });
         if (!cancelled) log('✓ 全部完成', 'ok');
       } catch (e) {
         log('✗ 处理出错: ' + e.message, 'err');
@@ -160,7 +160,7 @@ window.__PAGES__.push({
     cancelBtn.addEventListener('click', async () => {
       cancelled = true;
       log('正在取消…');
-      try { await window.api.call('cancel'); } catch (e) { /* 后端已退出等,忽略 */ }
+      try { await window.api.call('resize_cancel'); } catch (e) { /* 后端已退出等,忽略 */ }
     });
 
     this._cleanup = () => offLog();

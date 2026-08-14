@@ -92,7 +92,7 @@ ArtistToolkit/
 
 ### 新增一个 TAB 页
 
-**完整指南见 `docs/new-tab-guide.md`**(三步:写 core/backend → index.html 加一行 script + view.js 注册 → 界面调 `window.api`)。
+**完整指南见 `docs/new-tab-guide.md`**(三步:写 core → 根 backend.py 注册命令 → index.html 加一行 script + view.js 注册 → 界面调 `window.api`)。
 
 核心约定:**一个功能 = `tools/<name>/` 一个自包含文件夹**,外壳 `app/` 只做页签栏和路由,不装功能代码。
 

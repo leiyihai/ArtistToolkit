@@ -213,7 +213,7 @@ window.__PAGES__.push({
       progress.classList.add('indeterminate');
       log(`开始: ${files.length} 张图 · ${CROPS.find(c => c[0] === state.crop)[1]}${cornerDesc} · ${sizes.join('/')} · ${out}`);
       try {
-        await window.api.call('process_batch', {
+        await window.api.call('icon_process', {
           paths: files.map(f => f.path),
           crop: state.crop,
           sizes,

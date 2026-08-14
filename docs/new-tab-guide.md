@@ -8,25 +8,24 @@
 ```
 tools/<name>/
 ├── core.py          # 功能核心逻辑(纯 Python,无界面)
-├── backend.py       # (可选)stdio JSON 后端:Electron 经子进程调用,长驻进程
 ├── frontend/
 │   └── view.js      # 该 TAB 页界面,registerPage 注册
 └── docs/            # (可选)该功能的文档/参考
 ```
 
-- **纯前端功能**(不需要 Python):只写 `frontend/view.js` 即可,不用建 core/backend。
-- **需要后台处理**(抠图/计算/文件批处理):写 `core.py` + `backend.py`,界面经 `window.api.call` 调用。
+- **纯前端功能**(不需要 Python):只写 `frontend/view.js` 即可,不用建 core。
+- **需要后台处理**(抠图/计算/文件批处理):写 `core.py`,界面经 `window.api.call` 调用;命令统一注册到项目根 `backend.py`(聚合后端,所有功能共用一个进程,模型只加载一次)。
 
 ## 三步接入
 
-### 1. 写后端(可选)
+### 1. 写后端逻辑(core.py)
 
-参照 `tools/icon_export/backend.py` 的 stdio 协议,进程长驻、模型只加载一次:
+`core.py` 提供纯 Python 函数(如 `process_batch(paths, out, log=print)`),在项目根 `backend.py` 里 import 并注册命令:
 
 - **stdin**:每行一个请求 `{"id": 1, "cmd": "xxx", ...参数}`
 - **stdout**:每行一个消息
   - 结果 `{"id": 1, "ok": true, "result": ...}` 或 `{"id": 1, "ok": false, "error": "..."}`
-  - 进度/日志事件 `{"id": 1, "event": "log", "message": "..."}`
+  - 进度/日志事件 `{"id": 1, "event": "log"|"progress", ...}`
 - 记得在入口强制 UTF-8(Windows 下避免日志乱码):
   ```python
   import sys
@@ -83,4 +82,4 @@ window.api.defaultOut()    // 默认输出目录(桌面)
 
 ## 打包注意
 
-后端参与打包时,在 `ArtistToolkit-backend.spec` 里入口改为新功能入口(或扩展 backend.py 增加 cmd 分支);无需新后端时保持现状。
+后端打包入口为项目根 `backend.py`(聚合所有功能命令);`ArtistToolkit-backend.spec` 已指向它,无需每次改动。

@@ -16,7 +16,7 @@ let outBuf = '';
 function findBackend() {
   const exe = path.join(ROOT, 'dist', 'ArtistToolkit-backend.exe');
   if (fs.existsSync(exe)) return { cmd: exe, args: [] };
-  const py = path.join(ROOT, 'tools', 'icon_export', 'backend.py');
+  const py = path.join(ROOT, 'backend.py');
   return { cmd: process.platform === 'win32' ? 'python' : 'python3', args: [py] };
 }
 
