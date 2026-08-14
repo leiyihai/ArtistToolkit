@@ -53,13 +53,9 @@ def is_transparent(img):
 
 # ---------- 拆图标 ----------
 def split_by_gaps(mask):
-    # ponytail: 穿透判定——谷底必须接近全透明才算网格间隙;
-    # 仅凭投影相对低会误切图标内部空隙(圆润表情包/镂空图标)。
-    # 需要更精确切分(不规则排列/斜排)时换基于形态学的算法。
-    """按行列投影缝隙把 mask 切成网格子块,返回局部 (x1,y1,x2,y2) 列表。
-
-    分隔线要求整行/列穿透(投影接近 0),图标内部空隙投影虽低但不切。
-    """
+    # ponytail: 规则网格假设——检测贯穿行/列的投影谷底切分。
+    # 非规则排列(错位/斜排)的图标集无法切分,需时换基于形态学/模板的算法。
+    """按行列投影缝隙把 mask 切成网格子块,返回局部 (x1,y1,x2,y2) 列表"""
     import numpy as np
     from scipy.signal import find_peaks
     h, w = mask.shape
@@ -67,11 +63,10 @@ def split_by_gaps(mask):
     cs = mask.sum(axis=0)
     if rs.max() == 0:
         return []
-    gap_thresh = max(1.0, 0.02 * max(rs.max(), cs.max()))  # 穿透阈值:谷底须低于此行/列峰值的 2%
     rv, _ = find_peaks(-rs, prominence=rs.max() * 0.1, width=2)
     cv, _ = find_peaks(-cs, prominence=cs.max() * 0.1, width=2)
-    rows = [0] + [int(v) for v in rv if rs[v] <= gap_thresh] + [h]
-    cols = [0] + [int(v) for v in cv if cs[v] <= gap_thresh] + [w]
+    rows = [0] + [int(v) for v in rv] + [h]
+    cols = [0] + [int(v) for v in cv] + [w]
     blocks = []
     for i in range(len(rows) - 1):
         for j in range(len(cols) - 1):
@@ -93,13 +88,10 @@ def segment_icons(img):
     mask = alpha > 10
     labeled, num = ndimage.label(mask)
     sizes = ndimage.sum(mask, labeled, range(1, num + 1))
-    max_size = float(sizes.max()) if num else 0.0
 
     boxes = []
     for i in range(1, num + 1):
-        # 绝对阈值 + 相对主块比例:滤掉抠图残渣(如 ~1k 像素小碎块)
-        # ponytail: 按最大块 2% 过滤,图标集近似等大时安全;含极小真图标时需按内容再判
-        if sizes[i - 1] < MIN_ICON_PIXELS or (max_size and sizes[i - 1] < 0.02 * max_size):
+        if sizes[i - 1] < MIN_ICON_PIXELS:
             continue
         ys, xs = np.where(labeled == i)
         x1, y1, x2, y2 = xs.min(), ys.min(), xs.max(), ys.max()
