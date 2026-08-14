@@ -34,7 +34,7 @@ window.__PAGES__.push({
         </div>
       </div>
       <div class="runbar">
-        <div class="progress" id="progress"><div class="bar"></div></div>
+        <div class="progress" id="progress"><div class="bar" id="bar"></div></div>
         <button class="btn btn-primary" id="run">开始抠图</button>
       </div>
       <div class="card">
@@ -51,6 +51,7 @@ window.__PAGES__.push({
     const logEl = container.querySelector('#log');
     const runBtn = container.querySelector('#run');
     const progress = container.querySelector('#progress');
+    const bar = container.querySelector('#bar');
 
     const log = (msg, cls) => {
       logEl.textContent += (logEl.textContent === '就绪。' ? '' : '\n') + msg;
@@ -115,9 +116,12 @@ window.__PAGES__.push({
     // 默认输出路径
     window.api.defaultOut().then(d => { outEl.value = d; });
 
-    // 后端日志(本页活动期间)
+    // 后端日志 + 进度
     const offLog = window.api.onLog((msg) => {
       if (msg.event === 'log') log(msg.message || '');
+      else if (msg.event === 'progress' && msg.total) {
+        bar.style.width = Math.round(msg.done / msg.total * 100) + '%';
+      }
     });
 
     runBtn.addEventListener('click', async () => {
@@ -129,7 +133,8 @@ window.__PAGES__.push({
       running = true;
       runBtn.disabled = true;
       runBtn.textContent = '抠图中…';
-      progress.classList.add('indeterminate');
+      progress.classList.remove('indeterminate');
+      bar.style.width = '0%';
       log(`开始: ${files.length} 张图 · 输出到 ${out}`);
       try {
         await window.api.call('matting_process', {
@@ -143,7 +148,6 @@ window.__PAGES__.push({
       running = false;
       runBtn.disabled = false;
       runBtn.textContent = '开始抠图';
-      progress.classList.remove('indeterminate');
     });
 
     this._cleanup = () => { offLog(); files.forEach(f => URL.revokeObjectURL(f.url)); };

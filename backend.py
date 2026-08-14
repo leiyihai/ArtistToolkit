@@ -12,10 +12,10 @@ import os
 import sys
 import threading
 
-# 强制 stdout/stderr 用 UTF-8:Windows 默认 GBK,Electron 主进程按 UTF-8 解码会乱码
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
+# 强制 stdin/stdout/stderr 用 UTF-8:Windows 默认 GBK,Electron 主进程按 UTF-8 传输会乱码
+for _s in (sys.stdin, sys.stdout, sys.stderr):
+    if hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8")
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
@@ -24,6 +24,11 @@ if _ROOT not in sys.path:
 from tools.icon_export.core import process_batch as icon_process, selftest as icon_selftest
 from tools.ai_matting.core import process_batch as matting_process, selftest as matting_selftest
 from tools.image_resize.core import process as resize_process, selftest as resize_selftest
+
+# 预热:主线程完成重量级依赖的首次 import(懒加载的 numpy/scipy/rembg 若在请求线程首次加载会卡死)
+import numpy  # noqa: E402
+import scipy  # noqa: E402
+import rembg  # noqa: E402
 
 _lock = threading.Lock()      # stdout 多线程写入互斥
 _resize_cancel = threading.Event()
@@ -76,6 +81,7 @@ def main():
                 threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: matting_process(
                     req["paths"], req["out"],
                     log=lambda m: emit(out, rid, event="log", message=m),
+                    progress=lambda d, t: emit(out, rid, event="progress", done=d, total=t),
                 )), daemon=True).start()
             elif cmd == "resize_process":
                 _resize_cancel.clear()

@@ -40,8 +40,11 @@ def is_transparent(img):
 
 
 # ---------- 主流程 ----------
-def process_batch(paths, out_dir, log=print):
-    """逐张:抠图 → 保存透明背景 PNG 到 out_dir(原名)。已透明图片跳过。"""
+def process_batch(paths, out_dir, log=print, progress=None):
+    """逐张:抠图 → 保存透明背景 PNG 到 out_dir(原名)。已透明图片跳过。
+
+    progress(done, total) 每处理完一张回调一次。
+    """
     os.makedirs(out_dir, exist_ok=True)
 
     total = len(paths)
@@ -55,14 +58,16 @@ def process_batch(paths, out_dir, log=print):
             if is_transparent(img):
                 log("  跳过(已是透明背景)")
                 continue
-            log("  抠图中…(首次运行需下载约 1GB 模型,请耐心等待)")
+            log("  抠图中…(CPU 处理较慢,每张约 1 分钟;首次加载模型更久,请耐心等待)")
             img = matting(img)
             save_path = os.path.join(out_dir, base + ".png")
             img.save(save_path, "PNG")
-            done += 1
             log(f"  → {os.path.basename(save_path)}")
         except Exception as e:
             log(f"  !! 处理失败: {e}")
+        done += 1
+        if progress:
+            progress(done, total)
         gc.collect()
     log(f"完成:{done} 张已输出到 {out_dir}")
 
