@@ -116,6 +116,7 @@ window.__PAGES__.push({
     // 输出尺寸(多选,默认 128)
     SIZES.forEach(s => {
       const b = document.createElement('button');
+      b.className = 'chip';  // 必须带 chip 类,选中样式 .chip.active 才生效
       b.textContent = `${s}×${s}`;
       b.dataset.v = s;
       if (s === 128) b.classList.add('active');
