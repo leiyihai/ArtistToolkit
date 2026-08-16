@@ -49,10 +49,6 @@ window.__PAGES__.push({
         <div class="progress" id="progress"><div class="bar"></div></div>
         <button class="btn btn-primary" id="run">开始转换</button>
       </div>
-      <div class="card">
-        <h2>运行日志</h2>
-        <div class="log" id="log">就绪。</div>
-      </div>
       <div class="card" id="preview-card">
         <h2>预览天空盒</h2>
         <div class="field"><span class="field-label">面图目录</span>
@@ -64,6 +60,10 @@ window.__PAGES__.push({
           <span style="color:var(--muted)">在浏览器中打开 3D 天空盒(拖拽旋转视角),无需重新烘焙</span>
           <button class="btn btn-primary" id="open-preview">在浏览器中预览</button>
         </div>
+      </div>
+      <div class="card">
+        <h2>运行日志</h2>
+        <div class="log" id="log">就绪。</div>
       </div>
     `;
 

@@ -79,7 +79,7 @@ function callBackend(cmd, payload) {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1040, height: 720, minWidth: 880, minHeight: 600,
+    width: 1280, height: 900, minWidth: 880, minHeight: 600,
     backgroundColor: '#f5f4ef',
     autoHideMenuBar: true,
     webPreferences: {
