@@ -14,4 +14,6 @@ contextBridge.exposeInMainWorld('api', {
   toolsRoot: () => ipcRenderer.invoke('get-tools-root'),
   defaultOut: () => ipcRenderer.invoke('default-out'),
   pickDir: () => ipcRenderer.invoke('dialog:pickDir'),
+  pickFile: () => ipcRenderer.invoke('dialog:pickFile'),
+  openUrl: (url) => ipcRenderer.invoke('open-url', url),
 });

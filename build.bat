@@ -28,6 +28,11 @@ call npx electron-packager . ArtistToolkit --platform=win32 --arch=x64 --out=..\
 cd ..
 if errorlevel 1 (echo Electron 打包失败 & pause & exit /b 1)
 
+rem 3) 天空盒默认模型(木板/宝箱等)内置到 exe 旁 models,用户可继续添加
+if exist "%~dp0tools\img2box\models" (
+    xcopy /e /i /y "%~dp0tools\img2box\models" "%~dp0dist-electron\ArtistToolkit-win32-x64\models\" >nul
+    echo   默认天空盒模型已复制到产物 models)
+
 echo [3/3] 完成.
 echo 产物: dist-electron\ArtistToolkit-win32-x64\ArtistToolkit.exe(双击运行,含后端引擎与抠图模型)
 pause

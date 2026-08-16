@@ -8,7 +8,8 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=(
-        copy_metadata('rembg')
+        [('tools/img2box/assets', 'tools/img2box/assets')]  # .blend + bake_skybox.py(非 py 不自动收集)
+        + copy_metadata('rembg')
         + copy_metadata('pymatting')   # importlib.metadata 需要,缺失会 ImportError
         + copy_metadata('pooch')
     ),

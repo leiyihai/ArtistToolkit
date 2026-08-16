@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const os = require('os');
 const { spawn } = require('child_process');
 const path = require('path');
@@ -7,6 +7,10 @@ const fs = require('fs');
 const ROOT = path.join(__dirname, '..');
 // 功能页脚本根目录:开发 = 项目根/tools;打包 = resources/tools(--extra-resource 放置)
 const TOOLS_ROOT = path.join(ROOT, 'tools');
+// 天空盒预览模型根:开发 = 项目 tools/img2box/models;打包 = exe 旁 models(用户可自行添加)
+const VIEWER_MODELS = app.isPackaged
+  ? path.join(path.dirname(process.execPath), 'models')
+  : path.join(ROOT, 'tools', 'img2box', 'models');
 
 let win = null;
 let backend = null;
@@ -32,7 +36,7 @@ function startBackend() {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: ROOT,
     // 内置模型目录(打包模式 = resources/models,开发模式 = 项目根 models),后端据此免下载
-    env: { ...process.env, ATK_MODELS_DIR: path.join(ROOT, 'models') },
+    env: { ...process.env, ATK_MODELS_DIR: path.join(ROOT, 'models'), ATK_VIEWER_MODELS: VIEWER_MODELS },
   });
 
   backend.stdout.on('data', (chunk) => {
@@ -100,6 +104,14 @@ ipcMain.handle('dialog:pickDir', async () => {
   });
   return r.canceled ? null : r.filePaths[0];
 });
+ipcMain.handle('dialog:pickFile', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: '选择文件', properties: ['openFile'],
+    filters: [{ name: '可执行文件', extensions: ['exe'] }, { name: '所有文件', extensions: ['*'] }],
+  });
+  return r.canceled ? null : r.filePaths[0];
+});
+ipcMain.handle('open-url', (_e, url) => shell.openExternal(url));
 
 app.whenReady().then(() => {
   startBackend();

@@ -30,6 +30,9 @@ if _models_dir and os.path.exists(os.path.join(_models_dir, "birefnet-general.on
 from tools.icon_export.core import process_batch as icon_process, selftest as icon_selftest
 from tools.ai_matting.core import process_batch as matting_process, selftest as matting_selftest
 from tools.image_resize.core import process as resize_process, selftest as resize_selftest
+from tools.img2box.core import process as img2box_process, selftest as img2box_selftest
+from tools.img2box.core import find_blender as img2box_find_blender
+from tools.img2box.core import start_preview as img2box_preview
 
 # 预热:主线程完成重量级依赖的首次 import(懒加载的 numpy/scipy/rembg 若在请求线程首次加载会卡死)
 import numpy  # noqa: E402
@@ -40,6 +43,8 @@ import rembg  # noqa: E402
 
 _lock = threading.Lock()      # stdout 多线程写入互斥
 _resize_cancel = threading.Event()
+# 天空盒预览模型根(地面/展示模型,由 main.js 传入):开发=项目 tools/img2box/models,打包=exe 旁 models
+_VIEWER_MODELS = os.environ.get("ATK_VIEWER_MODELS", "")
 
 
 def emit(out, rid, **payload):
@@ -52,8 +57,8 @@ def emit(out, rid, **payload):
 
 def run_job(out, rid, fn):
     try:
-        fn()
-        emit(out, rid, ok=True, result="处理完成")
+        result = fn()
+        emit(out, rid, ok=True, result=result if result is not None else "处理完成")
     except Exception as e:
         import traceback
         emit(out, rid, ok=False, error=str(e), trace=traceback.format_exc())
@@ -75,7 +80,7 @@ def main():
             if cmd == "ping":
                 emit(out, rid, ok=True, result="pong")
             elif cmd == "selftest":
-                results = [icon_selftest(), matting_selftest(), resize_selftest()]
+                results = [icon_selftest(), matting_selftest(), resize_selftest(), img2box_selftest()]
                 ok = all(r[0] for r in results)
                 emit(out, rid, ok=ok, result="; ".join(f"{'OK' if r[0] else 'FAIL'} {r[1]}" for r in results))
             elif cmd == "icon_process":
@@ -102,6 +107,17 @@ def main():
             elif cmd == "resize_cancel":
                 _resize_cancel.set()
                 emit(out, rid, ok=True, result="cancelled")
+            elif cmd == "img2box_process":
+                threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: img2box_process(
+                    req["input"], req["blender_path"], req["out_dir"],
+                    log=lambda m: emit(out, rid, event="log", message=m),
+                    progress=lambda s: emit(out, rid, event="progress", message=s),
+                )), daemon=True).start()
+            elif cmd == "img2box_find_blender":
+                emit(out, rid, ok=True, result=img2box_find_blender())
+            elif cmd == "img2box_preview":
+                emit(out, rid, ok=True, result=img2box_preview(
+                    req["skybox_dir"], models_root=_VIEWER_MODELS or None))
             else:
                 emit(out, rid, ok=False, error=f"未知命令: {cmd}")
         except Exception as e:
