@@ -12,8 +12,12 @@ let nextId = 1;
 const pending = new Map(); // id -> {resolve, reject}
 let outBuf = '';
 
-// 后端进程:优先用打包好的 exe,否则退回 python 直跑(开发模式)
+// 后端进程查找:
+//   打包模式 -> <app>/resources/ArtistToolkit-backend.exe(asar 外,--extra-resource 放置)
+//   开发模式 -> 项目 dist/ArtistToolkit-backend.exe,或 python 直跑 backend.py
 function findBackend() {
+  const bundled = path.join(ROOT, 'ArtistToolkit-backend.exe');
+  if (fs.existsSync(bundled)) return { cmd: bundled, args: [] };
   const exe = path.join(ROOT, 'dist', 'ArtistToolkit-backend.exe');
   if (fs.existsSync(exe)) return { cmd: exe, args: [] };
   const py = path.join(ROOT, 'backend.py');

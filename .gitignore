@@ -6,6 +6,7 @@ input/
 output/
 build/
 dist/
+dist-electron/
 .reasonix/
 reasonix.toml
 node_modules/

@@ -1,10 +1,19 @@
 @echo off
-rem æ‰“åŒ… ArtistToolkit
-rem   1) Python æŠ å›¾å¼•æ“åç«¯ -> dist\ArtistToolkit-backend.exe(Electron ä¸»è¿›ç¨‹è°ƒç”¨)
-rem   2) æ—§ç‰ˆ Tkinter GUI(è¿‡æ¸¡æœŸä¿ç•™)-> dist\ArtistToolkit.exe
+rem Ò»¼ü´ò°ü Artist Toolkit ·Ö·¢°æ
+rem   1) Python ¾ÛºÏºó¶Ë -> dist\ArtistToolkit-backend.exe
+rem   2) Electron Ãâ°²×°°æ -> dist-electron\ArtistToolkit-win32-x64\ArtistToolkit.exe
 cd /d "%~dp0"
+
+echo [1/2] ´ò°ü Python ºó¶Ë...
 python -m PyInstaller --noconfirm --clean ArtistToolkit-backend.spec
-python -m PyInstaller --noconfirm --clean ArtistToolkit.spec
+if errorlevel 1 (echo ºó¶Ë´ò°üÊ§°Ü & pause & exit /b 1)
+
+echo [2/2] ´ò°ü Electron Ó¦ÓÃ...
+cd app
+call npx electron-packager . ArtistToolkit --platform=win32 --arch=x64 --out=..\dist-electron --overwrite --extra-resource ..\dist\ArtistToolkit-backend.exe
+cd ..
+if errorlevel 1 (echo Electron ´ò°üÊ§°Ü & pause & exit /b 1)
+
 echo.
-echo å®Œæˆ: dist\ArtistToolkit-backend.exe + dist\ArtistToolkit.exe
+echo Íê³É: dist-electron\ArtistToolkit-win32-x64\ArtistToolkit.exe(Ë«»÷ÔËĞĞ,ÄÚÖÃºó¶ËÒıÇæ)
 pause
