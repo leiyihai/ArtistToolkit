@@ -11,3 +11,4 @@ dist-electron/
 reasonix.toml
 node_modules/
 *.log
+models/

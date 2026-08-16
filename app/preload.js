@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   // 拖放 File -> 真实路径(新版 Electron 已移除 File.path)
   pathFor: (file) => webUtils.getPathForFile(file),
+  toolsRoot: () => ipcRenderer.invoke('get-tools-root'),
   defaultOut: () => ipcRenderer.invoke('default-out'),
   pickDir: () => ipcRenderer.invoke('dialog:pickDir'),
 });

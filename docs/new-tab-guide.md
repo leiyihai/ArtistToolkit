@@ -32,15 +32,13 @@ tools/<name>/
   sys.stdout.reconfigure(encoding="utf-8")
   ```
 
-### 2. 注册页面(两处)
+### 2. 注册页面(一处)
 
-`app/renderer/index.html`,在功能页脚本区加一行:
+`app/renderer/shell.js` 的 `FEATURES` 数组里登记功能文件夹名:
 
-```html
-<!-- 功能页:一 TAB 一脚本,registerPage 注册 -->
-<script src="../../tools/icon_export/frontend/view.js"></script>
-<script src="../../tools/<name>/frontend/view.js"></script>
-<script src="shell.js"></script>
+```js
+// 新增 TAB 页:在此登记文件夹名
+const FEATURES = ['icon_export', 'ai_matting', 'image_resize'];
 ```
 
 `tools/<name>/frontend/view.js` 里:
@@ -55,7 +53,8 @@ window.__PAGES__.push({
 });
 ```
 
-外壳(`shell.js`)自动渲染侧边栏页签并切换,无需其他改动。
+外壳启动时按 `FEATURES` 动态加载各功能脚本并渲染侧边栏页签,无需再改 `index.html`。
+`tools/` 目录会被 `build.bat` 内置进打包产物(功能页脚本随包分发)。
 
 ### 3. 界面调后端
 

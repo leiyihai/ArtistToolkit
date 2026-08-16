@@ -5,6 +5,8 @@ const path = require('path');
 const fs = require('fs');
 
 const ROOT = path.join(__dirname, '..');
+// 功能页脚本根目录:开发 = 项目根/tools;打包 = resources/tools(--extra-resource 放置)
+const TOOLS_ROOT = path.join(ROOT, 'tools');
 
 let win = null;
 let backend = null;
@@ -26,7 +28,12 @@ function findBackend() {
 
 function startBackend() {
   const { cmd, args } = findBackend();
-  backend = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: ROOT });
+  backend = spawn(cmd, args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    cwd: ROOT,
+    // 内置模型目录(打包模式 = resources/models,开发模式 = 项目根 models),后端据此免下载
+    env: { ...process.env, ATK_MODELS_DIR: path.join(ROOT, 'models') },
+  });
 
   backend.stdout.on('data', (chunk) => {
     outBuf += chunk.toString();
@@ -82,6 +89,7 @@ function createWindow() {
 }
 
 ipcMain.handle('backend:call', (_e, cmd, payload) => callBackend(cmd, payload));
+ipcMain.handle('get-tools-root', () => TOOLS_ROOT);
 ipcMain.handle('default-out', () => {
   const d = path.join(os.homedir(), 'Desktop');
   return fs.existsSync(d) ? d : path.join(os.homedir(), 'OneDrive', 'Desktop');

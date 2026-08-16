@@ -21,6 +21,12 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+# 内置模型(分享免下载):main.js 经 ATK_MODELS_DIR 传入模型目录,
+# 存在则让 rembg 直接从该目录加载(U2NET_HOME),跳过下载;否则保持默认缓存目录。
+_models_dir = os.environ.get("ATK_MODELS_DIR", "")
+if _models_dir and os.path.exists(os.path.join(_models_dir, "birefnet-general.onnx")):
+    os.environ.setdefault("U2NET_HOME", _models_dir)
+
 from tools.icon_export.core import process_batch as icon_process, selftest as icon_selftest
 from tools.ai_matting.core import process_batch as matting_process, selftest as matting_selftest
 from tools.image_resize.core import process as resize_process, selftest as resize_selftest
