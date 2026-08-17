@@ -5,6 +5,10 @@ rem   2) Electron 免安装版 -> dist-electron\ArtistToolkit-win32-x64\ArtistToolki
 rem   3) 抠图模型(972MB)内置 -> resources\models\birefnet-general.onnx
 cd /d "%~dp0"
 
+rem 0) 校验功能登记完整性(新增功能后漏登记会在此拦截)
+python check_pack.py
+if errorlevel 1 (pause & exit /b 1)
+
 echo [0/3] 准备抠图模型(优先项目 models\,缺则从本机缓存复制)...
 if not exist "models\birefnet-general.onnx" (
     if exist "%USERPROFILE%\.u2net\birefnet-general.onnx" (
