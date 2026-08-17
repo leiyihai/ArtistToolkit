@@ -24,7 +24,13 @@ if errorlevel 1 (echo 后端打包失败 & pause & exit /b 1)
 
 echo [2/3] 打包 Electron 应用...
 cd app
-call npx electron-packager . ArtistToolkit --platform=win32 --arch=x64 --out=..\dist-electron --overwrite --extra-resource ..\dist\ArtistToolkit-backend.exe --extra-resource ..\models --extra-resource ..\tools
+rem 打包工具本地安装(避免 npx 临时下载因网络失败)
+if not exist "node_modules\.bin\electron-packager.cmd" (
+    echo   正在安装打包工具 electron-packager(仅首次)...
+    call npm install --save-dev electron-packager
+    if errorlevel 1 (echo 安装 electron-packager 失败 & cd .. & pause & exit /b 1)
+)
+call node_modules\.bin\electron-packager.cmd . ArtistToolkit --platform=win32 --arch=x64 --out=..\dist-electron --overwrite --extra-resource ..\dist\ArtistToolkit-backend.exe --extra-resource ..\models --extra-resource ..\tools
 cd ..
 if errorlevel 1 (echo Electron 打包失败 & pause & exit /b 1)
 
