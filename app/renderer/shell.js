@@ -1,6 +1,6 @@
 // 外壳:动态加载功能页脚本(tools/<name>/frontend/view.js),渲染侧边栏,切换时 mount/unmount
 // 新增 TAB 页:在 FEATURES 里登记文件夹名(见 docs/new-tab-guide.md),无需改 index.html
-const FEATURES = ['icon_export', 'ai_matting', 'image_resize', 'img2box'];
+const FEATURES = ['icon_export', 'ai_matting', 'image_resize', 'img2box', 'unmult'];
 
 const sidebar = document.getElementById('sidebar-pages');
 const container = document.getElementById('page-container');

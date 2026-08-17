@@ -30,6 +30,7 @@ if _models_dir and os.path.exists(os.path.join(_models_dir, "birefnet-general.on
 from tools.icon_export.core import process_batch as icon_process, selftest as icon_selftest
 from tools.ai_matting.core import process_batch as matting_process, selftest as matting_selftest
 from tools.image_resize.core import process as resize_process, selftest as resize_selftest
+from tools.unmult.core import process_batch as unmult_process, selftest as unmult_selftest
 from tools.img2box.core import process as img2box_process, selftest as img2box_selftest
 from tools.img2box.core import find_blender as img2box_find_blender
 from tools.img2box.core import start_preview as img2box_preview
@@ -80,9 +81,19 @@ def main():
             if cmd == "ping":
                 emit(out, rid, ok=True, result="pong")
             elif cmd == "selftest":
-                results = [icon_selftest(), matting_selftest(), resize_selftest(), img2box_selftest()]
+                results = [icon_selftest(), matting_selftest(), resize_selftest(), img2box_selftest(), unmult_selftest()]
                 ok = all(r[0] for r in results)
                 emit(out, rid, ok=ok, result="; ".join(f"{'OK' if r[0] else 'FAIL'} {r[1]}" for r in results))
+            elif cmd == "unmult_process":
+                threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: unmult_process(
+                    req["paths"], req["out"],
+                    mode=req.get("mode", "auto"),
+                    defringe=req.get("defringe", 0.0),
+                    rebuild_alpha=req.get("rebuild_alpha", False),
+                    no_overwrite=req.get("no_overwrite", False),
+                    log=lambda m: emit(out, rid, event="log", message=m),
+                    progress=lambda d, t: emit(out, rid, event="progress", done=d, total=t),
+                )), daemon=True).start()
             elif cmd == "icon_process":
                 threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: icon_process(
                     req["paths"], req["crop"], req["sizes"], req["out"],
