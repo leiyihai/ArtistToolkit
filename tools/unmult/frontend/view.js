@@ -1,10 +1,10 @@
-// UnMult 去底 TAB 页(Electron renderer)
+// 特效抠图 TAB 页(Electron renderer)
 // 与 tools/unmult/core.py(经 backend.py stdio 服务)联调。
 window.__PAGES__ = window.__PAGES__ || [];
 
 window.__PAGES__.push({
   id: 'unmult',
-  title: 'UnMult 去底',
+  title: '特效抠图',
 
   mount(container) {
     let files = []; // {path, url, name}
@@ -12,7 +12,7 @@ window.__PAGES__.push({
 
     container.innerHTML = `
       <div class="page-head">
-        <h1>UnMult 去底</h1>
+        <h1>特效抠图</h1>
         <p>去掉黑底 / 白底,输出带真实 Alpha 的透明 PNG(火焰、烟雾、粒子、光效素材)</p>
       </div>
       <div class="card">

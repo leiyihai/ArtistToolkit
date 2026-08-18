@@ -1,4 +1,4 @@
-// 图片批量缩放 TAB 页(Electron renderer)
+// 图片快捷尺寸 TAB 页(Electron renderer)
 // 与 tools/image_resize/core.py(经 backend.py stdio 服务)联调。
 window.__PAGES__ = window.__PAGES__ || [];
 
@@ -14,7 +14,7 @@ const PRESETS = [
 
 window.__PAGES__.push({
   id: 'image-resize',
-  title: '批量缩放',
+  title: '快捷尺寸',
 
   mount(container) {
     let running = false;
@@ -22,7 +22,7 @@ window.__PAGES__.push({
 
     container.innerHTML = `
       <div class="page-head">
-        <h1>批量缩放</h1>
+        <h1>快捷尺寸</h1>
         <p>递归扫描文件夹 → 精确缩放到目标尺寸 → 保持目录结构输出</p>
       </div>
       <div class="card">

@@ -1,10 +1,10 @@
-// AI 抠图 TAB 页(Electron renderer)
+// 智能抠图 TAB 页(Electron renderer)
 // 与 tools/ai_matting/core.py(经 backend.py stdio 服务)联调。
 window.__PAGES__ = window.__PAGES__ || [];
 
 window.__PAGES__.push({
   id: 'ai-matting',
-  title: 'AI 抠图',
+  title: '智能抠图',
 
   mount(container) {
     let files = []; // {path, url, name}
@@ -12,7 +12,7 @@ window.__PAGES__.push({
 
     container.innerHTML = `
       <div class="page-head">
-        <h1>AI 抠图</h1>
+        <h1>智能抠图</h1>
         <p>拖入图片 → AI 去除背景 → 输出透明背景 PNG(保留原尺寸)</p>
       </div>
       <div class="card">

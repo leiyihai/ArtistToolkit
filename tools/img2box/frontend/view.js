@@ -1,9 +1,9 @@
-// HDRI 转天空盒 TAB 页:选 HDRI → 指定 Blender → 烘焙/切图/输出 → 一键浏览器预览
+// 天空盒烘焙 TAB 页:选 HDRI → 指定 Blender → 烘焙/切图/输出 → 一键浏览器预览
 window.__PAGES__ = window.__PAGES__ || [];
 
 window.__PAGES__.push({
   id: 'img2box',
-  title: 'HDRI 转天空盒',
+  title: '天空盒烘焙',
 
   mount(container) {
     let hdriPath = '';
@@ -12,7 +12,7 @@ window.__PAGES__.push({
 
     container.innerHTML = `
       <div class="page-head">
-        <h1>HDRI 转天空盒</h1>
+        <h1>天空盒烘焙</h1>
         <p>HDRI 全景图 → Blender 烘焙 → 4×3 网格切图 → 6 个天空盒面(含 bedwars 版)</p>
       </div>
       <div class="card">
