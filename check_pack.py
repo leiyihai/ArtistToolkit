@@ -15,10 +15,11 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def read_features():
-    shell = open(os.path.join(ROOT, "app", "renderer", "shell.js"), encoding="utf-8").read()
-    m = re.search(r"const FEATURES = \[(.*?)\];", shell, re.S)
+    """从 features.js 读取页签顺序(数组顺序 = 显示顺序)。"""
+    src = open(os.path.join(ROOT, "app", "renderer", "features.js"), encoding="utf-8").read()
+    m = re.search(r"window\.__FEATURES__ = \[(.*?)\];", src, re.S)
     if not m:
-        raise SystemExit("shell.js 中找不到 FEATURES 数组")
+        raise SystemExit("features.js 中找不到 __FEATURES__ 数组")
     return re.findall(r"'([^']+)'", m.group(1))
 
 

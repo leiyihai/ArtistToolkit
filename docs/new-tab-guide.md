@@ -34,11 +34,11 @@ tools/<name>/
 
 ### 2. 注册页面(一处)
 
-`app/renderer/shell.js` 的 `FEATURES` 数组里登记功能文件夹名:
+在 `app/renderer/features.js` 的 `__FEATURES__` 数组里登记功能文件夹名(**数组顺序 = 侧边栏显示顺序,调整排序只改这里**):
 
 ```js
-// 新增 TAB 页:在此登记文件夹名
-const FEATURES = ['icon_export', 'ai_matting', 'image_resize'];
+// 页签配置:功能目录名 + 顺序(数组顺序 = 显示顺序)
+window.__FEATURES__ = ['icon_export', 'ai_matting', 'image_resize'];
 ```
 
 `tools/<name>/frontend/view.js` 里:

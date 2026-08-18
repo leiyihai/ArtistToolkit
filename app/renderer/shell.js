@@ -1,6 +1,6 @@
 // 外壳:动态加载功能页脚本(tools/<name>/frontend/view.js),渲染侧边栏,切换时 mount/unmount
-// 新增 TAB 页:在 FEATURES 里登记文件夹名(见 docs/new-tab-guide.md),无需改 index.html
-const FEATURES = ['icon_export', 'ai_matting', 'image_resize', 'img2box', 'unmult'];
+// 新增 TAB 页:在 features.js 的 FEATURES 里登记文件夹名(见 docs/new-tab-guide.md),无需改本文件
+const FEATURES = window.__FEATURES__ || [];
 
 const sidebar = document.getElementById('sidebar-pages');
 const container = document.getElementById('page-container');
@@ -22,6 +22,10 @@ function loadScript(url) {
   await Promise.all(FEATURES.map((name) => loadScript(base + '/' + name + '/frontend/view.js')));
 
   const PAGES = window.__PAGES__ || [];
+  // 并发加载完成顺序不定,按 features.js 定义的 FEATURES 顺序固定页签排序
+  // (view.js 的 id 用连字符,FEATURES 用下划线,归一化后匹配)
+  const idx = (p) => FEATURES.indexOf((p.id || '').replace(/-/g, '_'));
+  PAGES.sort((a, b) => idx(a) - idx(b));
   PAGES.forEach((page, i) => {
     const btn = document.createElement('button');
     btn.className = 'nav-btn';
