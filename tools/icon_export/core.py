@@ -32,17 +32,20 @@ _session = None
 _remove_fn = None
 
 _MODEL_NAME = "birefnet-general"
-_U2NET_DIR = os.path.join(os.path.expanduser("~"), ".u2net")
 _MODEL_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx"
 
 
-def _ensure_model(log=None):
-    """确保模型文件就绪:缺失则流式下载、已存在则预热读取,期间按字节回调百分比。
+def _model_home():
+    """模型目录:打包版优先用包内模型(U2NET_HOME,免下载),否则用户缓存目录。"""
+    d = os.environ.get("U2NET_HOME")
+    if d and os.path.isfile(os.path.join(d, _MODEL_NAME + ".onnx")):
+        return d
+    return os.path.join(os.path.expanduser("~"), ".u2net")
 
-    下载/加载都是大文件(~927MB),没有现成进度回调;预热读取顺带填充页缓存,加速 onnxruntime 加载。
-    """
-    os.makedirs(_U2NET_DIR, exist_ok=True)
-    path = os.path.join(_U2NET_DIR, _MODEL_NAME + ".onnx")
+
+def _ensure_model(log=None):
+    """确保模型文件就绪:优先用包内模型(U2NET_HOME),缺失则下载到用户缓存并预热,按字节回调百分比。"""
+    path = os.path.join(_model_home(), _MODEL_NAME + ".onnx")
     if os.path.exists(path) and os.path.getsize(path) > 100_000_000:
         total = os.path.getsize(path)
         read = 0
@@ -55,11 +58,15 @@ def _ensure_model(log=None):
                     log(f"⏳ 加载模型: {min(pct, 100)}%")  # ⏳ 前缀=前端原地更新此行
                 last_pct = pct
         return
+    # 下载(固定到用户目录:包内目录可能只读,且模型属用户缓存)
+    dl_dir = os.path.join(os.path.expanduser("~"), ".u2net")
+    os.makedirs(dl_dir, exist_ok=True)
+    dl_path = os.path.join(dl_dir, _MODEL_NAME + ".onnx")
     if log:
         log("⏳ 下载模型: 0%")
     import urllib.request
     req = urllib.request.Request(_MODEL_URL, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp, open(path, "wb") as f:
+    with urllib.request.urlopen(req, timeout=60) as resp, open(dl_path, "wb") as f:
         total = int(resp.headers.get("Content-Length") or 0)
         got = 0
         last_pct = -1

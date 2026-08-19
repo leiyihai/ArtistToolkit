@@ -35,8 +35,14 @@ function startBackend() {
   backend = spawn(cmd, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: ROOT,
-    // 内置模型目录(打包模式 = resources/models,开发模式 = 项目根 models),后端据此免下载
-    env: { ...process.env, ATK_MODELS_DIR: path.join(ROOT, 'models'), ATK_VIEWER_MODELS: VIEWER_MODELS },
+    env: {
+      ...process.env,
+      ATK_MODELS_DIR: path.join(ROOT, 'models'),
+      ATK_VIEWER_MODELS: VIEWER_MODELS,
+      // 包内自带模型时设 U2NET_HOME,后端 core 与 rembg 都直接用它,免下载
+      ...(fs.existsSync(path.join(ROOT, 'models', 'birefnet-general.onnx'))
+        ? { U2NET_HOME: path.join(ROOT, 'models') } : {}),
+    },
   });
 
   backend.stdout.on('data', (chunk) => {
