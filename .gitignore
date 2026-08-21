@@ -12,4 +12,3 @@ reasonix.toml
 node_modules/
 *.log
 models/
-tools/img2box/models/
