@@ -10,6 +10,7 @@ import json
 import re
 import subprocess
 import tempfile
+import shutil
 
 from PIL import Image, ImageDraw
 
@@ -319,23 +320,38 @@ def _ai_names(path, cache_dir, log=print):
               "只返回一个 JSON 对象，不要 Markdown，不要解释："
               '{"items":[{"index":1,"name":"名称"}]}. '
               "无法确认名称时 name 返回空字符串；不要调用工具，不要修改任何文件。")
+    codex = shutil.which("codex") or shutil.which("codex.cmd") or shutil.which("codex.exe")
+    if not codex:
+        log("  AI 识别跳过: 未找到 Codex CLI,请确认 codex 已加入 PATH")
+        return None
     try:
         proc = subprocess.run(
-            ["codex", "exec", "--ephemeral", "--sandbox", "read-only", "-i", image, prompt],
+            [codex, "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-i", image, prompt],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
             cwd=os.path.dirname(path), check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as e:
         log(f"  AI 识别跳过: {e}")
         return None
-    match = re.search(r'\{\s*"items"\s*:\s*\[.*?\]\s*\}', proc.stdout, re.S)
-    if not match:
-        log("  AI 识别跳过: 未返回有效 JSON")
+    raw = proc.stdout.strip()
+    candidates = [raw]
+    candidates.extend(re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.S))
+    candidates.extend(re.findall(r"(\{\s*[\"']items[\"']\s*:\s*\[.*?\]\s*\})", raw, re.S))
+    data = None
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict) and isinstance(parsed.get("items"), list):
+                data = parsed
+                break
+        except ValueError:
+            continue
+    if data is None:
+        detail = (proc.stderr or proc.stdout).strip().replace("\n", " ")[:300]
+        log(f"  AI 识别跳过: 未返回有效 JSON (退出码 {proc.returncode}) {detail}")
         return None
     try:
-        items = json.loads(match.group(0)).get("items")
-        if not isinstance(items, list):
-            return None
+        items = data["items"]
         with open(result_path, "w", encoding="utf-8") as f:
             json.dump({"items": items}, f, ensure_ascii=False, indent=2)
         return items
