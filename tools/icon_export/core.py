@@ -392,7 +392,7 @@ def _ai_names(path, cache_dir, log=print):
         return None
 
 
-def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_ratio=None, ai_rename=False, log=print):
+def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_ratio=None, ai_rename=False, ai_source_paths=None, log=print):
     """逐张:抠图 → 拆图标 → 按类型/尺寸裁切保存。
 
     输出结构:
@@ -443,7 +443,12 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
             if ai_rename:
                 log("  已保存编号散图,开始 AI 识别名称…")
                 names = None
-                items = _ai_names(path, ai_cache, log=log)
+                ai_path = (ai_source_paths or [])[idx - 1] if ai_source_paths and idx <= len(ai_source_paths) else path
+                if ai_path and os.path.exists(ai_path):
+                    items = _ai_names(ai_path, ai_cache, log=log)
+                else:
+                    log("  AI 识别跳过: 未找到对应带文字图集")
+                    items = None
                 if items and len(items) == len(icons):
                     candidate = [_safe_name(x.get("name", "")) for x in items]
                     if all(candidate):

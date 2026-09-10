@@ -102,6 +102,23 @@ def main():
                     ai_rename=req.get("ai_rename", False),
                     log=lambda m: emit(out, rid, event="log", message=m),
                 )), daemon=True).start()
+            elif cmd == "icon_ai_process":
+                clean_dir = req["clean_dir"]
+                named_dir = req["named_dir"]
+                exts = {".png", ".jpg", ".jpeg", ".webp"}
+                clean_paths = [os.path.join(clean_dir, n) for n in sorted(os.listdir(clean_dir))
+                               if os.path.splitext(n)[1].lower() in exts]
+                named_by_name = {n.lower(): os.path.join(named_dir, n) for n in os.listdir(named_dir)
+                                 if os.path.splitext(n)[1].lower() in exts}
+                named_paths = [named_by_name.get(os.path.basename(p).lower(), "") for p in clean_paths]
+                threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: icon_process(
+                    clean_paths, req["crop"], req["sizes"], req["out"],
+                    normalize=req.get("normalize", False),
+                    corner_ratio=req.get("corner_ratio"),
+                    ai_rename=True,
+                    ai_source_paths=named_paths,
+                    log=lambda m: emit(out, rid, event="log", message=m),
+                )), daemon=True).start()
             elif cmd == "matting_process":
                 threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: matting_process(
                     req["paths"], req["out"],

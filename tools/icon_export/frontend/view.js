@@ -25,8 +25,10 @@ window.__PAGES__.push({
     container.innerHTML = `
       <div class="page-head">
         <h1>图集拆分</h1>
-        <p>拖入图片 → 抠图去背景 → 拆分为独立图标 → 按形状与尺寸裁切输出</p>
+        <p>选择旧版拆分或 AI 图集命名流程</p>
       </div>
+      <div class="seg" id="mode-tabs"><button class="active" data-mode="legacy">旧版图集拆分</button><button data-mode="ai">AI 图集命名</button></div>
+      <div id="legacy-panel">
       <div class="card">
         <h2>1 · 添加图片</h2>
         <div class="dropzone" id="dz">将图片拖到此处,或点击选择(PNG / JPG / WebP,可多张)</div>
@@ -72,6 +74,19 @@ window.__PAGES__.push({
         <h2>运行日志</h2>
         <div class="log" id="log">就绪。</div>
       </div>
+      </div>
+      <div id="ai-panel" style="display:none">
+        <div class="card">
+          <h2>AI 图集命名</h2>
+          <p>无文字版用于拆图，带名称版用于 Codex CLI 识别；两边按相同文件名匹配。</p>
+          <div class="field"><span class="field-label">AI 生成图片(无文字版)</span><input class="text-input" id="ai-clean" spellcheck="false"><button class="btn" data-pick="ai-clean">浏览…</button></div>
+          <div class="field"><span class="field-label">AI 生成图片(带名称版)</span><input class="text-input" id="ai-named" spellcheck="false"><button class="btn" data-pick="ai-named">浏览…</button></div>
+          <div class="field"><span class="field-label">拆图标保存路径</span><input class="text-input" id="ai-out" spellcheck="false"><button class="btn" data-pick="ai-out">浏览…</button></div>
+          <div class="field"><span class="field-label">输出尺寸</span><div class="chips" id="ai-size-chips"></div></div>
+          <div class="runbar"><div class="progress" id="ai-progress"><div class="bar"></div></div><button class="btn btn-primary" id="ai-run">开始 AI 命名</button></div>
+          <div class="log" id="ai-log">就绪。</div>
+        </div>
+      </div>
     `;
 
     const dz = container.querySelector('#dz');
@@ -84,6 +99,27 @@ window.__PAGES__.push({
     const progress = container.querySelector('#progress');
     const cropSeg = container.querySelector('#crop-seg');
     const sizeChips = container.querySelector('#size-chips');
+    const aiLogEl = container.querySelector('#ai-log');
+    const aiLog = (m) => { aiLogEl.textContent += (aiLogEl.textContent === '就绪。' ? '' : '\n') + m; aiLogEl.scrollTop = aiLogEl.scrollHeight; };
+    container.querySelectorAll('#mode-tabs button').forEach(b => b.addEventListener('click', () => {
+      const ai = b.dataset.mode === 'ai';
+      container.querySelectorAll('#mode-tabs button').forEach(x => x.classList.toggle('active', x === b));
+      container.querySelector('#legacy-panel').style.display = ai ? 'none' : '';
+      container.querySelector('#ai-panel').style.display = ai ? '' : 'none';
+    }));
+    container.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', async () => {
+      const d = await window.api.pickDir(); if (d) container.querySelector('#' + b.dataset.pick).value = d;
+    }));
+    const aiSizeChips = container.querySelector('#ai-size-chips');
+    SIZES.forEach(s => { const b = document.createElement('button'); b.className = 'chip' + (s === 128 ? ' active' : ''); b.textContent = `${s}×${s}`; b.dataset.v = s; b.addEventListener('click', () => b.classList.toggle('active')); aiSizeChips.appendChild(b); });
+    container.querySelector('#ai-run').addEventListener('click', async () => {
+      const clean = container.querySelector('#ai-clean').value.trim(), named = container.querySelector('#ai-named').value.trim(), out = container.querySelector('#ai-out').value.trim();
+      if (!clean || !named || !out) { aiLog('请填写三个文件夹路径。'); return; }
+      const sizes = [...aiSizeChips.querySelectorAll('.active')].map(b => +b.dataset.v); if (!sizes.length) { aiLog('请至少选择一个输出尺寸。'); return; }
+      const list = dir => window.api.listImages ? window.api.listImages(dir) : null;
+      aiLog('AI 版后端入口已准备，正在处理同名图集…');
+      try { await window.api.call('icon_ai_process', { clean_dir: clean, named_dir: named, out, crop: state.crop, sizes, normalize: state.normalize }); aiLog('✓ AI 图集命名完成。'); } catch (e) { aiLog('✗ ' + e.message); }
+    });
 
     // 裁切类型(单选)
     const cornerRow = container.querySelector('#corner-row');
