@@ -414,6 +414,7 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
         os.makedirs(ai_cache, exist_ok=True)
 
     total = len(paths)
+    sequence = 0
     for idx, path in enumerate(paths, 1):
         name = os.path.basename(path)
         base = os.path.splitext(name)[0]
@@ -429,7 +430,8 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
             log(f"  拆出 {len(icons)} 个图标")
             # 先落盘编号结果,避免 AI 调用等待期间用户看不到拆图产物。
             for i, icon in enumerate(icons, 1):
-                bname = f"{base}_{i}"
+                sequence += 1
+                bname = f"{sequence:04d}"
                 icon.save(os.path.join(icons_dir, bname + ".png"))
                 for size in sizes:
                     out = crop_icon(icon, crop_type, size, corner_ratio)
@@ -452,14 +454,15 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
                 else:
                     used = set()
                     for i, name_value in enumerate(names, 1):
-                        final_name = name_value
+                        seq_num = sequence - len(names) + i
+                        final_name = f"{seq_num:04d}_{name_value}"
                         if final_name in used:
                             suffix = 2
                             while f"{final_name}_{suffix}" in used:
                                 suffix += 1
                             final_name = f"{final_name}_{suffix}"
                         used.add(final_name)
-                        old_name = f"{base}_{i}.png"
+                        old_name = f"{(sequence - len(names) + i):04d}.png"
                         for directory in [icons_dir] + [os.path.join(out_dir, crop_type, str(size)) for size in sizes]:
                             old_path = os.path.join(directory, old_name)
                             new_path = os.path.join(directory, final_name + ".png")
