@@ -11,6 +11,7 @@ import re
 import subprocess
 import tempfile
 import shutil
+import time
 
 from PIL import Image, ImageDraw
 
@@ -326,12 +327,30 @@ def _ai_names(path, cache_dir, log=print):
         return None
     log("  正在调用 Codex CLI 识别(最长等待 60 秒)…")
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             [codex, "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-i", image, prompt],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
-            cwd=os.path.dirname(path), check=False,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+            cwd=os.path.dirname(path),
         )
-    except (OSError, subprocess.TimeoutExpired) as e:
+        started = time.monotonic()
+        while True:
+            try:
+                proc.wait(timeout=5)
+                break
+            except subprocess.TimeoutExpired:
+                elapsed = int(time.monotonic() - started)
+                log(f"  AI 识别进行中…已等待 {elapsed} 秒")
+                if elapsed >= 60:
+                    proc.kill()
+                    proc.communicate()
+                    log("  AI 识别超时,保留顺序编号")
+                    return None
+        stdout, stderr = proc.communicate()
+        proc.stdout = stdout
+        proc.stderr = stderr
+        proc.returncode = proc.returncode
+        log(f"  Codex CLI 已返回(耗时 {int(time.monotonic() - started)} 秒)")
+    except OSError as e:
         log(f"  AI 识别跳过: {e}")
         return None
     raw = proc.stdout.strip()
