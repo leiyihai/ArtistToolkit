@@ -131,9 +131,9 @@ def selftest():
                 return False, "缩放尺寸应精确匹配"
             ratio_out = os.path.join(tmp, "ratio-out")
             process(os.path.join(tmp, "in"), ratio_out, 200, 200, keep_ratio=True, log=lambda m: None)
-            ratio_img = Image.open(os.path.join(ratio_out, "sub", "a.jpg"))
-            if ratio_img.size != (200, 200):
-                return False, "等比例模式应输出 200×200 画布"
+            with Image.open(os.path.join(ratio_out, "sub", "a.jpg")) as ratio_img:
+                if ratio_img.size != (200, 200):
+                    return False, "等比例模式应输出 200×200 画布"
             try:
                 process(os.path.join(tmp, "in"), os.path.join(tmp, "in"), 32, 32)
                 return False, "应拒绝输入输出同目录"
