@@ -331,6 +331,7 @@ def _ai_names(path, cache_dir, log=print):
             [codex, "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-i", image, prompt],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
             cwd=os.path.dirname(path),
+            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
         )
         started = time.monotonic()
         while True:
@@ -341,8 +342,16 @@ def _ai_names(path, cache_dir, log=print):
                 elapsed = int(time.monotonic() - started)
                 log(f"  AI 识别进行中…已等待 {elapsed} 秒")
                 if elapsed >= 60:
-                    proc.kill()
-                    proc.communicate()
+                    # Windows 上 codex 可能再启动子进程; taskkill /T 确保整棵进程树退出。
+                    if os.name == "nt":
+                        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                    else:
+                        proc.kill()
+                    try:
+                        proc.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
                     log("  AI 识别超时,保留顺序编号")
                     return None
         stdout, stderr = proc.communicate()

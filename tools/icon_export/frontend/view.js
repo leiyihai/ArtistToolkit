@@ -140,6 +140,8 @@ window.__PAGES__.push({
 
     let lastProgress = false;  // 上一行是否为进度行(⏳ 前缀=原地更新)
     const log = (msg, cls) => {
+      if (msg.includes('AI 识别进行中')) runBtn.textContent = msg.replace(/^.*?AI /, 'AI ');
+      if (msg.includes('AI 识别超时') || msg.includes('AI 识别跳过')) runBtn.textContent = '继续处理中…';
       const isProg = msg.startsWith('⏳');
       const text = isProg ? msg.slice(1) : msg;
       if (isProg && lastProgress) {
