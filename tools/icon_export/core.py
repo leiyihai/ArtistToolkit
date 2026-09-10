@@ -177,8 +177,32 @@ def segment_icons(img):
         else:
             merged.append(bx)
 
-    merged.sort(key=lambda b: (b[1], b[0]))
+    merged = sort_boxes_row_major(merged)
     return [img.crop((x1, y1, x2 + 1, y2 + 1)) for x1, y1, x2, y2 in merged]
+
+
+def sort_boxes_row_major(boxes):
+    """按视觉上的行优先顺序排序:从上到下,同一行从左到右。
+
+    不能只按左上角 y 排序,因为同一行图标的外接框高度可能不同。
+    以框中心点聚类成行,阈值取典型框高的一半,可容忍少量上下错位。
+    """
+    if not boxes:
+        return []
+    heights = sorted(max(1, b[3] - b[1]) for b in boxes)
+    typical_height = heights[len(heights) // 2]
+    row_tolerance = max(4, typical_height * 0.5)
+    rows = []
+    for box in sorted(boxes, key=lambda b: ((b[1] + b[3]) / 2, b[0])):
+        center_y = (box[1] + box[3]) / 2
+        row = next((r for r in rows if abs(center_y - r["center_y"]) <= row_tolerance), None)
+        if row is None:
+            row = {"center_y": center_y, "boxes": []}
+            rows.append(row)
+        row["boxes"].append(box)
+        row["center_y"] = sum((b[1] + b[3]) / 2 for b in row["boxes"]) / len(row["boxes"])
+    rows.sort(key=lambda r: r["center_y"])
+    return [box for row in rows for box in sorted(row["boxes"], key=lambda b: ((b[0] + b[2]) / 2, b[1]))]
 
 
 # ---------- 裁切 ----------
@@ -311,6 +335,13 @@ def selftest():
     icons = segment_icons(canvas)
     if len(icons) != 2:
         return False, f"拆分数量错误: 期望 2, 实际 {len(icons)}"
+    order_test = [
+        (210, 115, 250, 155), (10, 12, 50, 52), (110, 18, 150, 58),
+        (10, 112, 50, 152), (110, 108, 150, 148), (210, 15, 250, 55),
+    ]
+    ordered = sort_boxes_row_major(order_test)
+    if ordered != [order_test[1], order_test[2], order_test[5], order_test[3], order_test[4], order_test[0]]:
+        return False, f"行优先排序错误: {ordered}"
     for size in (32, 64, 128, 256):
         for ct in CROP_TYPES:
             out = crop_icon(icons[0], ct, size)
