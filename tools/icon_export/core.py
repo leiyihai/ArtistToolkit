@@ -321,18 +321,21 @@ def _ai_names(path, cache_dir, log=print):
               "只返回一个 JSON 对象，不要 Markdown，不要解释："
               '{"items":[{"index":1,"name":"名称"}]}. '
               "无法确认名称时 name 返回空字符串；不要调用工具，不要修改任何文件。")
-    codex = shutil.which("codex") or shutil.which("codex.cmd") or shutil.which("codex.exe")
+    # Windows 优先使用真实 exe,避免 npm 的 .cmd/.ps1 包装器吞掉位置参数。
+    codex = shutil.which("codex.exe") or shutil.which("codex") or shutil.which("codex.cmd")
     if not codex:
         log("  AI 识别跳过: 未找到 Codex CLI,请确认 codex 已加入 PATH")
         return None
     log("  正在调用 Codex CLI 识别(最长等待 60 秒)…")
     try:
         proc = subprocess.Popen(
-            [codex, "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-i", image, prompt],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+            [codex, "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-i", image],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
             cwd=os.path.dirname(path),
             creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
         )
+        proc.stdin.write(prompt)
+        proc.stdin.close()
         started = time.monotonic()
         while True:
             try:
