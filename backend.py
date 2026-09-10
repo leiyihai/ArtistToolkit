@@ -128,7 +128,7 @@ def main():
             elif cmd == "resize_process":
                 _resize_cancel.clear()
                 threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: resize_process(
-                    req["input"], req["output"], req["width"], req["height"],
+                    req["input"], req["output"], req["width"], req["height"], req.get("keep_ratio", False),
                     log=lambda m: emit(out, rid, event="log", message=m),
                     progress=lambda d, t: emit(out, rid, event="progress", done=d, total=t),
                     cancel=_resize_cancel,

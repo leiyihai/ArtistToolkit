@@ -47,7 +47,8 @@ window.__PAGES__.push({
           <input class="text-input num" id="w" type="number" min="1" max="8192" value="64" style="max-width:100px;">
           <span class="muted">×</span>
           <input class="text-input num" id="h" type="number" min="1" max="8192" value="64" style="max-width:100px;">
-          <span class="muted">像素,拉伸填满(不保持比例)</span>
+          <span class="muted">像素</span>
+          <label class="chip" id="ratio" style="user-select:none;">等比例(透明画布居中)</label>
         </div>
       </div>
       <div class="runbar">
@@ -73,6 +74,9 @@ window.__PAGES__.push({
     const presetChips = container.querySelector('#preset-chips');
     const wEl = container.querySelector('#w');
     const hEl = container.querySelector('#h');
+    const ratioEl = container.querySelector('#ratio');
+    let keepRatio = false;
+    ratioEl.addEventListener('click', () => { keepRatio = !keepRatio; ratioEl.classList.toggle('active', keepRatio); });
     let inputDir = '';
 
     const log = (msg, cls) => {
@@ -146,9 +150,9 @@ window.__PAGES__.push({
       runBtn.disabled = true; cancelBtn.disabled = false;
       progress.classList.remove('indeterminate');
       bar.style.width = '0%';
-      log(`开始: ${inputDir} → ${out} · 目标 ${w}×${h}`);
+      log(`开始: ${inputDir} → ${out} · 目标 ${w}×${h} · ${keepRatio ? '等比例居中' : '拉伸填满'}`);
       try {
-        await window.api.call('resize_process', { input: inputDir, output: out, width: w, height: h });
+        await window.api.call('resize_process', { input: inputDir, output: out, width: w, height: h, keep_ratio: keepRatio });
         if (!cancelled) log('✓ 全部完成', 'ok');
       } catch (e) {
         log('✗ 处理出错: ' + e.message, 'err');

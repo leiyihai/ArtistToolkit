@@ -36,19 +36,34 @@ def map_output_paths(images, input_dir, output_dir):
     return out
 
 
-def resize_image(src, dst, width, height):
-    """单张:精确缩放到 width×height(Lanczos3,拉伸,与 Rust resize_exact 一致)。"""
+def resize_image(src, dst, width, height, keep_ratio=False):
+    """单张缩放;等比例模式按 PS 脚本裁透明边界后居中放入透明画布。"""
     with Image.open(src) as img:
-        if img.mode in ("RGBA", "LA", "P") and dst.lower().endswith((".jpg", ".jpeg")):
+        if keep_ratio:
+            img = img.convert("RGBA")
+            bbox = img.getchannel("A").getbbox()
+            if bbox:
+                img = img.crop(bbox)
+            scale = min(width / img.width, height / img.height)
+            size = (max(1, round(img.width * scale)), max(1, round(img.height * scale)))
+            resized = img.resize(size, Image.Resampling.LANCZOS)
+            result = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            result.paste(resized, ((width - size[0]) // 2, (height - size[1]) // 2), resized)
+        elif img.mode in ("RGBA", "LA", "P") and dst.lower().endswith((".jpg", ".jpeg")):
             img = img.convert("RGB")  # JPEG 不支持透明通道
+            result = img.resize((width, height), Image.Resampling.LANCZOS)
         elif img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGBA")
-        resized = img.resize((width, height), Image.Resampling.LANCZOS)
+            result = img.resize((width, height), Image.Resampling.LANCZOS)
+        else:
+            result = img.resize((width, height), Image.Resampling.LANCZOS)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    resized.save(dst)
+    if result.mode == "RGBA" and dst.lower().endswith((".jpg", ".jpeg")):
+        result = result.convert("RGB")
+    result.save(dst)
 
 
-def process(input_dir, output_dir, width, height, log=print, progress=None, cancel=None):
+def process(input_dir, output_dir, width, height, keep_ratio=False, log=print, progress=None, cancel=None):
     """主流程:扫描 → 映射 → 并行缩放。
 
     progress(done, total) 每完成一张回调一次;cancel(threading.Event) 置位后跳过剩余任务。
@@ -71,12 +86,13 @@ def process(input_dir, output_dir, width, height, log=print, progress=None, canc
         log(f"警告:{len(images) - len(new_images)} 个文件路径无法映射,将处理其余 {len(new_images)} 个")
 
     total = len(new_images)
-    log(f"扫描到 {len(images)} 张图片,开始缩放 {total} 张到 {width}×{height}…")
+    mode_text = "等比例居中" if keep_ratio else "拉伸填满"
+    log(f"扫描到 {len(images)} 张图片,开始缩放 {total} 张到 {width}×{height}({mode_text})…")
     done = 0
     succeeded = 0
     with ThreadPoolExecutor(max_workers=min(32, os.cpu_count() or 4)) as pool:
         futures = {
-            pool.submit(resize_image, src, dst, width, height): i
+            pool.submit(resize_image, src, dst, width, height, keep_ratio): i
             for i, (src, dst) in enumerate(zip(images, new_images))
         }
         for fut in as_completed(futures):
@@ -113,6 +129,11 @@ def selftest():
                 return False, "输出应保持相对目录结构 sub/a.jpg"
             if Image.open(out_file).size != (32, 64):
                 return False, "缩放尺寸应精确匹配"
+            ratio_out = os.path.join(tmp, "ratio-out")
+            process(os.path.join(tmp, "in"), ratio_out, 200, 200, keep_ratio=True, log=lambda m: None)
+            ratio_img = Image.open(os.path.join(ratio_out, "sub", "a.jpg"))
+            if ratio_img.size != (200, 200):
+                return False, "等比例模式应输出 200×200 画布"
             try:
                 process(os.path.join(tmp, "in"), os.path.join(tmp, "in"), 32, 32)
                 return False, "应拒绝输入输出同目录"
