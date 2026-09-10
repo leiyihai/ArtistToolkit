@@ -20,6 +20,7 @@ window.__PAGES__.push({
   mount(container) {
     let files = []; // {path, url, name}
     let running = false;
+    let activeMode = 'legacy';
     const state = { crop: 'original', normalize: false, aiRename: false, cornerRatio: CORNER_DEFAULT };
 
     container.innerHTML = `
@@ -62,9 +63,6 @@ window.__PAGES__.push({
       <div class="field"><span class="field-label"></span>
           <label class="chip" id="norm" style="user-select:none;">统一图标视觉大小</label>
       </div>
-        <div class="field"><span class="field-label"></span>
-          <label class="chip" id="ai-rename" style="user-select:none;">AI 识别名称并重命名(需登录 Codex CLI)</label>
-        </div>
       </div>
       <div class="runbar">
         <div class="progress" id="progress"><div class="bar"></div></div>
@@ -82,7 +80,10 @@ window.__PAGES__.push({
           <div class="field"><span class="field-label">AI 生成图片(无文字版)</span><input class="text-input" id="ai-clean" spellcheck="false"><button class="btn" data-pick="ai-clean">浏览…</button></div>
           <div class="field"><span class="field-label">AI 生成图片(带名称版)</span><input class="text-input" id="ai-named" spellcheck="false"><button class="btn" data-pick="ai-named">浏览…</button></div>
           <div class="field"><span class="field-label">拆图标保存路径</span><input class="text-input" id="ai-out" spellcheck="false"><button class="btn" data-pick="ai-out">浏览…</button></div>
+          <div class="field"><span class="field-label">裁切类型</span><div class="seg" id="ai-crop-seg"></div></div>
+          <div class="field disabled" id="ai-corner-row"><span class="field-label">圆角半径</span><input type="range" id="ai-corner" min="1" max="64" value="18" step="1"><span id="ai-corner-val">18px</span></div>
           <div class="field"><span class="field-label">输出尺寸</span><div class="chips" id="ai-size-chips"></div></div>
+          <div class="field"><span class="field-label"></span><label class="chip" id="ai-norm" style="user-select:none;">统一图标视觉大小</label></div>
           <div class="runbar"><div class="progress" id="ai-progress"><div class="bar"></div></div><button class="btn btn-primary" id="ai-run">开始 AI 命名</button></div>
           <div class="log" id="ai-log">就绪。</div>
         </div>
@@ -102,7 +103,7 @@ window.__PAGES__.push({
     const aiLogEl = container.querySelector('#ai-log');
     const aiLog = (m) => { aiLogEl.textContent += (aiLogEl.textContent === '就绪。' ? '' : '\n') + m; aiLogEl.scrollTop = aiLogEl.scrollHeight; };
     container.querySelectorAll('#mode-tabs button').forEach(b => b.addEventListener('click', () => {
-      const ai = b.dataset.mode === 'ai';
+      const ai = b.dataset.mode === 'ai'; activeMode = ai ? 'ai' : 'legacy';
       container.querySelectorAll('#mode-tabs button').forEach(x => x.classList.toggle('active', x === b));
       container.querySelector('#legacy-panel').style.display = ai ? 'none' : '';
       container.querySelector('#ai-panel').style.display = ai ? '' : 'none';
@@ -110,15 +111,21 @@ window.__PAGES__.push({
     container.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', async () => {
       const d = await window.api.pickDir(); if (d) container.querySelector('#' + b.dataset.pick).value = d;
     }));
+    const aiState = { crop: 'original', normalize: false, cornerRatio: CORNER_DEFAULT };
+    const aiCropSeg = container.querySelector('#ai-crop-seg');
+    const aiCornerRow = container.querySelector('#ai-corner-row');
+    CROPS.forEach(([v, label]) => { const b = document.createElement('button'); b.textContent = label; b.dataset.v = v; if (v === aiState.crop) b.classList.add('active'); b.addEventListener('click', () => { aiState.crop = v; [...aiCropSeg.children].forEach(x => x.classList.toggle('active', x === b)); aiCornerRow.classList.toggle('disabled', v !== 'rounded_square'); }); aiCropSeg.appendChild(b); });
+    container.querySelector('#ai-corner').addEventListener('input', e => { aiState.cornerRatio = +e.target.value; container.querySelector('#ai-corner-val').textContent = e.target.value + 'px'; });
+    container.querySelector('#ai-norm').addEventListener('click', e => { aiState.normalize = !aiState.normalize; e.currentTarget.classList.toggle('active', aiState.normalize); });
     const aiSizeChips = container.querySelector('#ai-size-chips');
     SIZES.forEach(s => { const b = document.createElement('button'); b.className = 'chip' + (s === 128 ? ' active' : ''); b.textContent = `${s}×${s}`; b.dataset.v = s; b.addEventListener('click', () => b.classList.toggle('active')); aiSizeChips.appendChild(b); });
     container.querySelector('#ai-run').addEventListener('click', async () => {
       const clean = container.querySelector('#ai-clean').value.trim(), named = container.querySelector('#ai-named').value.trim(), out = container.querySelector('#ai-out').value.trim();
       if (!clean || !named || !out) { aiLog('请填写三个文件夹路径。'); return; }
       const sizes = [...aiSizeChips.querySelectorAll('.active')].map(b => +b.dataset.v); if (!sizes.length) { aiLog('请至少选择一个输出尺寸。'); return; }
-      const list = dir => window.api.listImages ? window.api.listImages(dir) : null;
+      activeMode = 'ai';
       aiLog('AI 版后端入口已准备，正在处理同名图集…');
-      try { await window.api.call('icon_ai_process', { clean_dir: clean, named_dir: named, out, crop: state.crop, sizes, normalize: state.normalize }); aiLog('✓ AI 图集命名完成。'); } catch (e) { aiLog('✗ ' + e.message); }
+      try { await window.api.call('icon_ai_process', { clean_dir: clean, named_dir: named, out, crop: aiState.crop, sizes, normalize: aiState.normalize, corner_ratio: aiState.crop === 'rounded_square' ? aiState.cornerRatio / 128 : undefined }); aiLog('✓ AI 图集命名完成。'); } catch (e) { aiLog('✗ ' + e.message); }
     });
 
     // 裁切类型(单选)
@@ -251,7 +258,7 @@ window.__PAGES__.push({
 
     // 后端日志(本页活动期间)
     const offLog = window.api.onLog((msg) => {
-      if (msg.event === 'log') log(msg.message || '');
+      if (msg.event === 'log') (activeMode === 'ai' ? aiLog : log)(msg.message || '');
     });
 
     runBtn.addEventListener('click', async () => {
