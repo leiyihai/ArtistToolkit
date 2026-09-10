@@ -349,3 +349,24 @@ body {
 .path-line.selected { color: var(--text); }
 .dropzone.has-value { border-color: var(--ok); }
 .muted { color: var(--muted); }
+
+/* AI 图集命名：路径、选项、运行反馈分层，避免与旧版流程混在一起 */
+.atlas-ai-panel { max-width: 980px; }
+.atlas-ai-panel .card { padding: 22px; }
+.atlas-ai-panel .ai-intro { color: var(--muted); max-width: 680px; line-height: 1.6; }
+.atlas-ai-panel .path-group { display: grid; gap: 12px; margin: 18px 0 22px; }
+.atlas-ai-panel .path-item { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.atlas-ai-panel .path-item .field-label { width: auto; color: var(--text); font-weight: 600; }
+.atlas-ai-panel .path-item .text-input { min-width: 0; font-size: 13px; color: var(--muted); }
+.atlas-ai-panel .option-section { border-top: 1px solid var(--border); padding-top: 18px; margin-top: 18px; }
+.atlas-ai-panel .option-section h3 { margin: 0 0 12px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.atlas-ai-panel #ai-crop-seg { flex-wrap: wrap; }
+.atlas-ai-panel .field-label { width: 190px; }
+.atlas-ai-panel .log { margin-top: 16px; min-height: 110px; }
+.atlas-ai-panel .runbar { margin-top: 22px; }
+@media (max-width: 700px) {
+  .atlas-ai-panel .path-item { grid-template-columns: 1fr; gap: 6px; }
+  .atlas-ai-panel .path-item .btn { justify-self: start; }
+  .atlas-ai-panel .field { align-items: flex-start; flex-wrap: wrap; }
+  .atlas-ai-panel .field-label { width: 100%; }
+}

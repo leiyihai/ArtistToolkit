@@ -73,17 +73,21 @@ window.__PAGES__.push({
         <div class="log" id="log">就绪。</div>
       </div>
       </div>
-      <div id="ai-panel" style="display:none">
+      <div id="ai-panel" class="atlas-ai-panel" style="display:none">
         <div class="card">
           <h2>AI 图集命名</h2>
-          <p>无文字版用于拆图，带名称版用于 Codex CLI 识别；两边按相同文件名匹配。</p>
-          <div class="field"><span class="field-label">AI 生成图片(无文字版)</span><input class="text-input" id="ai-clean" spellcheck="false"><button class="btn" data-pick="ai-clean">浏览…</button></div>
-          <div class="field"><span class="field-label">AI 生成图片(带名称版)</span><input class="text-input" id="ai-named" spellcheck="false"><button class="btn" data-pick="ai-named">浏览…</button></div>
-          <div class="field"><span class="field-label">拆图标保存路径</span><input class="text-input" id="ai-out" spellcheck="false"><button class="btn" data-pick="ai-out">浏览…</button></div>
-          <div class="field"><span class="field-label">裁切类型</span><div class="seg" id="ai-crop-seg"></div></div>
-          <div class="field disabled" id="ai-corner-row"><span class="field-label">圆角半径</span><input type="range" id="ai-corner" min="1" max="64" value="18" step="1"><span id="ai-corner-val">18px</span></div>
-          <div class="field"><span class="field-label">输出尺寸</span><div class="chips" id="ai-size-chips"></div></div>
-          <div class="field"><span class="field-label"></span><label class="chip" id="ai-norm" style="user-select:none;">统一图标视觉大小</label></div>
+          <p class="ai-intro">无文字版负责拆图，带名称版只用于识别。两个文件夹中的图集按相同文件名配对。</p>
+          <div class="path-group">
+            <div class="path-item"><span class="field-label">无文字图集</span><input class="text-input" id="ai-clean" spellcheck="false" placeholder="选择无文字图片文件夹"><button class="btn" data-pick="ai-clean">选择文件夹</button></div>
+            <div class="path-item"><span class="field-label">带名称图集</span><input class="text-input" id="ai-named" spellcheck="false" placeholder="选择带文字图片文件夹"><button class="btn" data-pick="ai-named">选择文件夹</button></div>
+            <div class="path-item"><span class="field-label">输出文件夹</span><input class="text-input" id="ai-out" spellcheck="false" placeholder="选择拆图保存位置"><button class="btn" data-pick="ai-out">选择文件夹</button></div>
+          </div>
+          <div class="option-section"><h3>输出选项</h3>
+            <div class="field"><span class="field-label">裁切类型</span><div class="seg" id="ai-crop-seg"></div></div>
+            <div class="field disabled" id="ai-corner-row"><span class="field-label">圆角半径</span><input type="range" id="ai-corner" min="1" max="64" value="18" step="1"><span id="ai-corner-val">18px</span></div>
+            <div class="field"><span class="field-label">输出尺寸</span><div class="chips" id="ai-size-chips"></div></div>
+            <div class="field"><span class="field-label"></span><label class="chip" id="ai-norm" style="user-select:none;">统一图标视觉大小</label></div>
+          </div>
           <div class="runbar"><div class="progress" id="ai-progress"><div class="bar"></div></div><button class="btn btn-primary" id="ai-run">开始 AI 命名</button></div>
           <div class="log" id="ai-log">就绪。</div>
         </div>
