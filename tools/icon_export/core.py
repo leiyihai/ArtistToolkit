@@ -324,10 +324,11 @@ def _ai_names(path, cache_dir, log=print):
     if not codex:
         log("  AI 识别跳过: 未找到 Codex CLI,请确认 codex 已加入 PATH")
         return None
+    log("  正在调用 Codex CLI 识别(最长等待 60 秒)…")
     try:
         proc = subprocess.run(
             [codex, "exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-i", image, prompt],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
             cwd=os.path.dirname(path), check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as e:
@@ -395,8 +396,20 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
 
             icons = segment_icons(img)
             log(f"  拆出 {len(icons)} 个图标")
-            names = None
+            # 先落盘编号结果,避免 AI 调用等待期间用户看不到拆图产物。
+            for i, icon in enumerate(icons, 1):
+                bname = f"{base}_{i}"
+                icon.save(os.path.join(icons_dir, bname + ".png"))
+                for size in sizes:
+                    out = crop_icon(icon, crop_type, size, corner_ratio)
+                    if normalize:
+                        out = normalize_icon(out)
+                    sub = os.path.join(out_dir, crop_type, str(size))
+                    os.makedirs(sub, exist_ok=True)
+                    out.save(os.path.join(sub, bname + ".png"))
             if ai_rename:
+                log("  已保存编号散图,开始 AI 识别名称…")
+                names = None
                 items = _ai_names(path, ai_cache, log=log)
                 if items and len(items) == len(icons):
                     candidate = [_safe_name(x.get("name", "")) for x in items]
@@ -405,26 +418,22 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
                         log("  AI 名称校验通过,执行自动重命名")
                 if names is None:
                     log("  AI 名称不完整,保留顺序编号")
-            used = set()
-            for i, icon in enumerate(icons, 1):
-                bname = f"{base}_{i}"
-                final_name = bname
-                if names:
-                    final_name = names[i - 1]
-                    if final_name in used:
-                        suffix = 2
-                        while f"{final_name}_{suffix}" in used:
-                            suffix += 1
-                        final_name = f"{final_name}_{suffix}"
-                    used.add(final_name)
-                icon.save(os.path.join(icons_dir, final_name + ".png"))
-                for size in sizes:
-                    out = crop_icon(icon, crop_type, size, corner_ratio)
-                    if normalize:
-                        out = normalize_icon(out)
-                    sub = os.path.join(out_dir, crop_type, str(size))
-                    os.makedirs(sub, exist_ok=True)
-                    out.save(os.path.join(sub, final_name + ".png"))
+                else:
+                    used = set()
+                    for i, name_value in enumerate(names, 1):
+                        final_name = name_value
+                        if final_name in used:
+                            suffix = 2
+                            while f"{final_name}_{suffix}" in used:
+                                suffix += 1
+                            final_name = f"{final_name}_{suffix}"
+                        used.add(final_name)
+                        old_name = f"{base}_{i}.png"
+                        for directory in [icons_dir] + [os.path.join(out_dir, crop_type, str(size)) for size in sizes]:
+                            old_path = os.path.join(directory, old_name)
+                            new_path = os.path.join(directory, final_name + ".png")
+                            if os.path.exists(old_path):
+                                os.replace(old_path, new_path)
         except Exception as e:
             log(f"  !! 处理失败: {e}")
         gc.collect()
