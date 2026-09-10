@@ -99,6 +99,7 @@ def main():
                     req["paths"], req["crop"], req["sizes"], req["out"],
                     normalize=req.get("normalize", False),
                     corner_ratio=req.get("corner_ratio"),
+                    ai_rename=req.get("ai_rename", False),
                     log=lambda m: emit(out, rid, event="log", message=m),
                 )), daemon=True).start()
             elif cmd == "matting_process":

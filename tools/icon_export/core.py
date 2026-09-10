@@ -5,6 +5,11 @@ GUI 不直接依赖本模块之外的脚本。
 """
 import os
 import gc
+import hashlib
+import json
+import re
+import subprocess
+import tempfile
 
 from PIL import Image, ImageDraw
 
@@ -279,7 +284,67 @@ def normalize_icon(img, target_ratio=0.5):
 
 
 # ---------- 主流程 ----------
-def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_ratio=None, log=print):
+def _ai_image_copy(path, cache_dir):
+    """生成适合 AI 识字的副本;小图保持原尺寸,大图最长边压到 2048。"""
+    img = Image.open(path).convert("RGB")
+    max_side = max(img.size)
+    if max_side > 2048:
+        scale = 2048 / max_side
+        img = img.resize((round(img.width * scale), round(img.height * scale)), Image.Resampling.LANCZOS)
+    stem = hashlib.sha256((os.path.abspath(path) + str(os.path.getsize(path)) + str(os.path.getmtime(path))).encode()).hexdigest()[:16]
+    target = os.path.join(cache_dir, stem + ".jpg")
+    if not os.path.exists(target):
+        img.save(target, "JPEG", quality=88, optimize=True)
+    return target, stem
+
+
+def _safe_name(name):
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", str(name)).strip(" .")
+    return name[:100].strip(" .")
+
+
+def _ai_names(path, cache_dir, log=print):
+    """用一次 Codex CLI 读取图集名称;失败返回 None,不阻断普通拆图。"""
+    image, key = _ai_image_copy(path, cache_dir)
+    result_path = os.path.join(cache_dir, key + ".json")
+    if os.path.exists(result_path):
+        try:
+            with open(result_path, encoding="utf-8") as f:
+                data = json.load(f)
+            log("  AI 识别缓存命中")
+            return data.get("items")
+        except (OSError, ValueError):
+            pass
+    prompt = ("分析附加的图集图片。按视觉顺序从左到右、从上到下识别每个图标下方的名称。"
+              "只返回一个 JSON 对象，不要 Markdown，不要解释："
+              '{"items":[{"index":1,"name":"名称"}]}. '
+              "无法确认名称时 name 返回空字符串；不要调用工具，不要修改任何文件。")
+    try:
+        proc = subprocess.run(
+            ["codex", "exec", "--ephemeral", "--sandbox", "read-only", "-i", image, prompt],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+            cwd=os.path.dirname(path), check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log(f"  AI 识别跳过: {e}")
+        return None
+    match = re.search(r'\{\s*"items"\s*:\s*\[.*?\]\s*\}', proc.stdout, re.S)
+    if not match:
+        log("  AI 识别跳过: 未返回有效 JSON")
+        return None
+    try:
+        items = json.loads(match.group(0)).get("items")
+        if not isinstance(items, list):
+            return None
+        with open(result_path, "w", encoding="utf-8") as f:
+            json.dump({"items": items}, f, ensure_ascii=False, indent=2)
+        return items
+    except (ValueError, OSError):
+        log("  AI 识别跳过: JSON 解析失败")
+        return None
+
+
+def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_ratio=None, ai_rename=False, log=print):
     """逐张:抠图 → 拆图标 → 按类型/尺寸裁切保存。
 
     输出结构:
@@ -296,6 +361,9 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
     os.makedirs(out_dir, exist_ok=True)
     icons_dir = os.path.join(out_dir, "icons")
     os.makedirs(icons_dir, exist_ok=True)
+    ai_cache = os.path.join(out_dir, ".atlas_ai_cache")
+    if ai_rename:
+        os.makedirs(ai_cache, exist_ok=True)
 
     total = len(paths)
     for idx, path in enumerate(paths, 1):
@@ -311,16 +379,36 @@ def process_batch(paths, crop_type, sizes, out_dir, normalize=False, corner_rati
 
             icons = segment_icons(img)
             log(f"  拆出 {len(icons)} 个图标")
+            names = None
+            if ai_rename:
+                items = _ai_names(path, ai_cache, log=log)
+                if items and len(items) == len(icons):
+                    candidate = [_safe_name(x.get("name", "")) for x in items]
+                    if all(candidate):
+                        names = candidate
+                        log("  AI 名称校验通过,执行自动重命名")
+                if names is None:
+                    log("  AI 名称不完整,保留顺序编号")
+            used = set()
             for i, icon in enumerate(icons, 1):
                 bname = f"{base}_{i}"
-                icon.save(os.path.join(icons_dir, bname + ".png"))
+                final_name = bname
+                if names:
+                    final_name = names[i - 1]
+                    if final_name in used:
+                        suffix = 2
+                        while f"{final_name}_{suffix}" in used:
+                            suffix += 1
+                        final_name = f"{final_name}_{suffix}"
+                    used.add(final_name)
+                icon.save(os.path.join(icons_dir, final_name + ".png"))
                 for size in sizes:
                     out = crop_icon(icon, crop_type, size, corner_ratio)
                     if normalize:
                         out = normalize_icon(out)
                     sub = os.path.join(out_dir, crop_type, str(size))
                     os.makedirs(sub, exist_ok=True)
-                    out.save(os.path.join(sub, bname + ".png"))
+                    out.save(os.path.join(sub, final_name + ".png"))
         except Exception as e:
             log(f"  !! 处理失败: {e}")
         gc.collect()

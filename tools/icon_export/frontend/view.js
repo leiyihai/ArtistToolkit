@@ -20,7 +20,7 @@ window.__PAGES__.push({
   mount(container) {
     let files = []; // {path, url, name}
     let running = false;
-    const state = { crop: 'original', normalize: false, cornerRatio: CORNER_DEFAULT };
+    const state = { crop: 'original', normalize: false, aiRename: false, cornerRatio: CORNER_DEFAULT };
 
     container.innerHTML = `
       <div class="page-head">
@@ -57,8 +57,11 @@ window.__PAGES__.push({
           <input class="text-input" id="out" spellcheck="false">
           <button class="btn" id="browse">浏览…</button>
         </div>
-        <div class="field"><span class="field-label"></span>
+      <div class="field"><span class="field-label"></span>
           <label class="chip" id="norm" style="user-select:none;">统一图标视觉大小</label>
+      </div>
+        <div class="field"><span class="field-label"></span>
+          <label class="chip" id="ai-rename" style="user-select:none;">AI 识别名称并重命名(需登录 Codex CLI)</label>
         </div>
       </div>
       <div class="runbar">
@@ -128,6 +131,11 @@ window.__PAGES__.push({
     norm.addEventListener('click', () => {
       state.normalize = !state.normalize;
       norm.classList.toggle('active', state.normalize);
+    });
+    const aiRename = container.querySelector('#ai-rename');
+    aiRename.addEventListener('click', () => {
+      state.aiRename = !state.aiRename;
+      aiRename.classList.toggle('active', state.aiRename);
     });
 
     let lastProgress = false;  // 上一行是否为进度行(⏳ 前缀=原地更新)
@@ -229,6 +237,7 @@ window.__PAGES__.push({
           sizes,
           out,
           normalize: state.normalize,
+          ai_rename: state.aiRename,
           corner_ratio: state.crop === 'rounded_square' ? state.cornerRatio / 128 : undefined,
         });
         log('✓ 全部完成,结果已保存到 ' + out, 'ok');
