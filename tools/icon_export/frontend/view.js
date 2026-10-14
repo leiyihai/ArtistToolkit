@@ -179,11 +179,6 @@ window.__PAGES__.push({
       state.normalize = !state.normalize;
       norm.classList.toggle('active', state.normalize);
     });
-    const aiRename = container.querySelector('#ai-rename');
-    aiRename.addEventListener('click', () => {
-      state.aiRename = !state.aiRename;
-      aiRename.classList.toggle('active', state.aiRename);
-    });
 
     let lastProgress = false;  // 上一行是否为进度行(⏳ 前缀=原地更新)
     const log = (msg, cls) => {
