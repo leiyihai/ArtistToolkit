@@ -17,6 +17,7 @@ use gpui_kit::*;
 use backend::Backend;
 use pages::ai_matting::AiMattingState;
 use pages::icon_export::IconExportState;
+use pages::img2box::Img2BoxState;
 use pages::image_resize::ImageResizeState;
 use pages::unmult::UnmultState;
 
@@ -70,6 +71,13 @@ impl Tab {
     }
 }
 
+/// 一次性查询(非长任务),走同一套 stdio 协议。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Query {
+    FindBlender,
+    Preview,
+}
+
 /// 当前在跑的任务属于哪一页,用于把后端的 log/progress 送回正确的页。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum JobKind {
@@ -77,6 +85,7 @@ pub enum JobKind {
     IconExport,
     Matting,
     Resize,
+    Img2Box,
 }
 
 pub struct Shell {
@@ -86,6 +95,8 @@ pub struct Shell {
     pub icon: IconExportState,
     pub matting: AiMattingState,
     pub resize: ImageResizeState,
+    pub img2box: Img2BoxState,
+    query: Option<(Query, u64)>,
     job: Option<(JobKind, u64)>,
     ping_id: Option<u64>,
     /// 后端最近一次状态提示(侧边栏底部)。
@@ -116,6 +127,8 @@ impl Shell {
             icon: IconExportState::default(),
             matting: AiMattingState::default(),
             resize: ImageResizeState::new(window, cx),
+            img2box: Img2BoxState::default(),
+            query: None,
             job: None,
             ping_id: None,
             status: "后端连接中…".to_string(),
@@ -137,12 +150,17 @@ impl Shell {
         if cfg!(debug_assertions) && std::env::var_os("ATK_UI_AUTORUN").is_some() {
             cx.spawn(async move |this, cx| {
                 smol::Timer::after(std::time::Duration::from_millis(900)).await;
-                let _ = this.update(cx, |shell, cx| match shell.tab {
-                    Tab::IconExport => shell.run_icon_export(cx),
-                    Tab::Unmult => shell.run_unmult(cx),
-                    Tab::AiMatting => shell.run_matting(cx),
-                    Tab::ImageResize => shell.run_resize(cx),
-                    _ => {}
+                let action = std::env::var("ATK_UI_AUTORUN").unwrap_or_default();
+                let _ = this.update(cx, |shell, cx| match action.as_str() {
+                    "detect" if shell.tab == Tab::Img2Box => shell.img2box_find_blender(cx),
+                    "preview" if shell.tab == Tab::Img2Box => shell.img2box_preview(cx),
+                    _ => match shell.tab {
+                        Tab::IconExport => shell.run_icon_export(cx),
+                        Tab::Unmult => shell.run_unmult(cx),
+                        Tab::AiMatting => shell.run_matting(cx),
+                        Tab::ImageResize => shell.run_resize(cx),
+                        Tab::Img2Box => shell.run_img2box(cx),
+                    },
                 });
             })
             .detach();
@@ -156,6 +174,7 @@ impl Shell {
             JobKind::IconExport => self.icon.push_log(text),
             JobKind::Matting => self.matting.push_log(text),
             JobKind::Resize => self.resize.push_log(text),
+            JobKind::Img2Box => self.img2box.push_log(text),
         }
     }
 
@@ -188,6 +207,11 @@ impl Shell {
                         JobKind::Unmult => self.unmult.progress = (done, total),
                         JobKind::Matting => self.matting.progress = (done, total),
                         JobKind::Resize => self.resize.progress = (done, total),
+                        JobKind::Img2Box => {
+                            if let Some(stage) = msg.get("message").and_then(|v| v.as_str()) {
+                                self.img2box.stage = stage.to_string();
+                            }
+                        }
                         JobKind::IconExport => {}
                     }
                 }
@@ -207,6 +231,16 @@ impl Shell {
                     } else {
                         "后端无响应".to_string()
                     };
+                } else if let Some((query, query_id)) = self.query
+                    && Some(query_id) == id
+                {
+                    self.query = None;
+                    let text = msg
+                        .get("result")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    self.on_query_result(query, text, ok);
                 } else if let Some((kind, job_id)) = job
                     && Some(job_id) == id
                 {
@@ -216,12 +250,45 @@ impl Shell {
         }
     }
 
+    fn on_query_result(&mut self, query: Query, text: String, ok: bool) {
+        match query {
+            Query::FindBlender => {
+                if !ok || text.is_empty() {
+                    self.img2box.push_log("未探测到 Blender,请手动浏览选择 blender.exe");
+                } else {
+                    self.img2box.push_log(format!("已探测到 Blender:{text}"));
+                    self.img2box.blender = text;
+                }
+            }
+            Query::Preview => {
+                if !ok || text.is_empty() {
+                    self.img2box.push_log("预览服务启动失败。");
+                } else {
+                    let suppress = cfg!(debug_assertions) && std::env::var_os("ATK_UI_NO_BROWSER").is_some();
+                    let opened = !suppress && pages::img2box::open_url(&text);
+                    self.img2box.push_log(if opened {
+                        format!("已在浏览器打开:{text}")
+                    } else {
+                        format!("预览地址:{text}")
+                    });
+                    self.img2box.preview_url = Some(text);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn query_job(&mut self, query: Query, cmd: &str, extra: serde_json::Value) -> u64 {
+        let id = self.backend.request(cmd, extra);
+        self.query = Some((query, id));
+        id
+    }
     fn set_running(&mut self, kind: JobKind, running: bool) {
         match kind {
             JobKind::Unmult => self.unmult.running = running,
             JobKind::IconExport => self.icon.running = running,
             JobKind::Matting => self.matting.running = running,
             JobKind::Resize => self.resize.running = running,
+            JobKind::Img2Box => self.img2box.running = running,
         }
     }
 
@@ -295,7 +362,7 @@ impl Render for Shell {
             Tab::IconExport => self.icon_view(cx).into_any_element(),
             Tab::AiMatting => self.matting_view(cx).into_any_element(),
             Tab::ImageResize => self.resize_view(cx).into_any_element(),
-            other => placeholder(other, cx).into_any_element(),
+            Tab::Img2Box => self.img2box_view(cx).into_any_element(),
         };
         h_flex()
             .size_full()
@@ -326,25 +393,6 @@ impl Render for Shell {
                     .child(div().flex_1().min_h_0().child(body)),
             )
     }
-}
-
-fn placeholder(tab: Tab, cx: &mut Context<Shell>) -> impl IntoElement {
-    v_flex()
-        .p_6()
-        .gap_3()
-        .items_start()
-        .child(div().text_lg().font_bold().child(tab.title()))
-        .child(
-            div()
-                .text_color(cx.theme().muted_foreground)
-                .child("这一页还没搬到 GPUI。当前已迁移「去底」与「图标批处理」。"),
-        )
-        .child(
-            div()
-                .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .child("Electron 版仍可用:start.bat;逐页移植进度见 ui/README.md。"),
-        )
 }
 
 fn main() {
