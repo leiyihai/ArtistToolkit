@@ -2,7 +2,7 @@
 //!
 //! 协议与 Electron 版完全一致:每行一个 JSON。
 //!   请求 {"id","cmd",...}
-//!   结果 {"id","ok":true,"result"|"error"}
+//!   结果 {"id":true,"ok":true,"result"|"error"}
 //!   事件 {"id","event":"log"|"progress",...}
 
 use std::io::{BufRead, BufReader, Write};
@@ -22,23 +22,32 @@ impl Backend {
     /// 启动后端:优先用已打包的 exe,否则用 `python backend.py`。
     pub fn spawn(root: &Path) -> std::io::Result<(Self, smol::channel::Receiver<String>)> {
         let exe = root.join("dist").join("ArtistToolkit-backend.exe");
-        let (mut cmd, _kind) = if exe.is_file() {
+        let bundled = root.join("ArtistToolkit-backend.exe");
+        let (cmd, _kind) = if bundled.is_file() {
+            (Command::new(&bundled), "bundled")
+        } else if exe.is_file() {
             (Command::new(&exe), "packaged")
         } else {
             let mut cmd = Command::new("python");
             cmd.arg("backend.py");
             (cmd, "python")
         };
+        let mut cmd = cmd;
         cmd.current_dir(root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .env("PYTHONIOENCODING", "utf-8")
             .env("PYTHONUTF8", "1");
-        // 与 Electron 版一致:优先用仓库内自带模型(免下载)。
+        // 与 Electron 版一致:优先用随包模型(免下载)。
         let models = root.join("models");
         if models.join("birefnet-general.onnx").is_file() {
             cmd.env("ATK_MODELS_DIR", &models);
+        }
+        // 天空盒预览的地面/展示模型目录。
+        let viewer_models = root.join("tools").join("img2box").join("models");
+        if viewer_models.is_dir() {
+            cmd.env("ATK_VIEWER_MODELS", &viewer_models);
         }
 
         let mut child = cmd.spawn()?;
@@ -106,8 +115,22 @@ impl Drop for Backend {
     }
 }
 
-/// 仓库根目录(开发期:ui/ 的上一级)。
-pub fn repo_root() -> PathBuf {
+/// 应用根目录(后端 exe / backend.py 所在目录)。
+///
+/// 解析顺序:
+/// 1. `ARTIST_TOOLKIT_ROOT` 环境变量(调试或自定义部署);
+/// 2. exe 同目录有 `ArtistToolkit-backend.exe` 或 `backend.py` → 打包布局,用 exe 目录;
+/// 3. 否则回退到编译期的仓库根目录(开发时 `cargo run`)。
+pub fn app_root() -> PathBuf {
+    if let Some(dir) = std::env::var_os("ARTIST_TOOLKIT_ROOT") {
+        return PathBuf::from(dir);
+    }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+        && (dir.join("ArtistToolkit-backend.exe").is_file() || dir.join("backend.py").is_file())
+    {
+        return dir.to_path_buf();
+    }
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .map(Path::to_path_buf)

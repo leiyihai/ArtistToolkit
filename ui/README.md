@@ -39,7 +39,7 @@ ui/ (Rust + GPUI)
 - 后端输出在后台线程读、经 channel 回到 GPUI 的 async 任务,界面只做状态渲染。
 - 任务用 `JobKind` 标记归属页,后端日志/进度只回到发起它的页面;一次性查询(`Query`)走同一条通道。
 
-## 运行
+## 运行与打包
 
 ```powershell
 cd ui
@@ -47,7 +47,19 @@ cargo run                     # 开发运行
 cargo build --release         # 发布构建: target\release\artist-toolkit-ui.exe
 ```
 
-需要 Rust 1.97+ 与 MSVC Build Tools;首次编译 GPUI 约 3–4 分钟。
+需要 Rust 1.97+ 与 MSVC Build Tools;首次编译 GPUI 约 3–4 分钟(实测 release 7.5 分钟)。
+
+分发包在仓库根目录构建:
+
+```bat
+package.bat        # 构建后端 exe + 组装 dist-gpui\ (前端 + 后端 + 模型)
+start.bat          # 默认启动入口:优先 dist-gpui\ArtistToolkit.exe,其次 release/debug,都没有则自动构建
+start-electron.bat # 旧版 Electron 界面
+```
+
+`dist-gpui\` 整个目录可直接拷给别人:后端是自带 Python 与 Rust 内核的单文件 exe;
+前端按**自身所在目录**找后端(`ARTIST_TOOLKIT_ROOT` 可覆盖),因此不依赖仓库路径。
+实测:从 `C:\` 启动 `dist-gpui\ArtistToolkit.exe`,子进程确认为 `dist-gpui\ArtistToolkit-backend.exe`。
 
 ## 开发期自动化(仅 debug 构建)
 
@@ -78,6 +90,6 @@ powershell -File scripts\screenshot.ps1 -Out _shot.png
 
 ## 后续
 
-1. 打包与分发:发布构建 + 把 GPUI exe 和 Python 后端一起打包,替换 `build.bat` 的分发入口。
-2. 拖拽入队(gpui 文件拖放)、窗口图标/标题栏定制。
+1. 拖拽入队(gpui 文件拖放)、窗口图标定制。
+2. 后端启动偏慢(PyInstaller onefile 解包 + rembg 预导入,首次连接约 20–35 秒),可考虑改 onedir 或连接期间给出更明确的提示。
 3. 可选:把「AI 图集命名」流程(icon_ai_process)也接进来。

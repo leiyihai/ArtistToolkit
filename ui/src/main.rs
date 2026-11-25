@@ -105,7 +105,7 @@ pub struct Shell {
 
 impl Shell {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let root = backend::repo_root();
+        let root = backend::app_root();
         let (backend, rx) = match Backend::spawn(&root) {
             Ok(pair) => pair,
             Err(error) => panic!("无法启动 Python 后端({}):{error}", root.display()),
@@ -402,6 +402,11 @@ fn main() {
 
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(None, size(px(1180.), px(760.)), cx)),
+            titlebar: Some(TitlebarOptions {
+                title: Some("Artist Toolkit".into()),
+                appears_transparent: false,
+                traffic_light_position: None,
+            }),
             ..Default::default()
         };
         gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Shell::new(window, cx)))

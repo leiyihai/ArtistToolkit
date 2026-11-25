@@ -15,12 +15,24 @@
 
 ## 安装运行
 
+**默认入口(Rust/GPUI 版界面)**:
+
+```bat
+start.bat
+```
+
+首次运行如果没有 `dist-gpui\ArtistToolkit.exe`,会先 `cargo build --release`(需要
+[Rust](https://rustup.rs) 与 MSVC Build Tools,约 3-8 分钟;之后秒开)。
+旧版 Electron 界面保留为 `start-electron.bat`。
+
+**只跑 Python 后端 / 旧版 Tkinter 界面**:
+
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
-首次抠图会自动下载 AI 模型(约 1GB,缓存于 `~/.u2net`;也可手动把模型文件放到该目录跳过下载)。
+首次抠图会自动下载 AI 模型(约 1GB,缓存于 `~/.u2net`;仓库 `models/` 有模型时自动使用,免下载)。
 
 ## 使用
 
@@ -44,18 +56,28 @@ python main.py
 
 ## 打包成 exe(分享给他人)
 
-```bash
-pip install pyinstaller
+**GPUI 版(默认界面)**:
+
+```bat
+package.bat
+```
+
+产物:`dist-gpui\ArtistToolkit.exe` + `ArtistToolkit-backend.exe` + `models\` + `tools\img2box\models\`。
+整个目录拷给别人即可运行,对方无需装 Python(后端已打包,含 Rust 内核 `.pyd`);`start.bat` 会优先用它。
+
+**Electron 版(旧界面)**:
+
+```bat
 build.bat
 ```
 
-产物:`dist/ArtistToolkit.exe`,单文件,双击即用,对方无需装 Python。
+产物:`dist/ArtistToolkit-backend.exe` + `dist-electron\ArtistToolkit-win32-x64\ArtistToolkit.exe`。
 
 ## 项目结构
 
 ```
 ArtistToolkit/
-├── app/                    # Electron 外壳(新界面,现代 Web UI)
+├── app/                    # Electron 外壳(旧界面,保留对照/回退)
 │   ├── package.json        # npm start 启动开发版
 │   ├── main.js             # 主进程:窗口 + Python 后端进程管理 + IPC
 │   ├── preload.js          # contextBridge 暴露 api(安全桥)
@@ -83,7 +105,7 @@ ArtistToolkit/
 ├── ArtistToolkit-backend.spec  # Python 后端 exe 的 PyInstaller 配置
 ├── build.bat               # 打包 Python 后端 exe + 旧版 GUI exe
 ├── start.bat               # 双击启动 Electron 新版界面
-├── ui/                     # Rust/GPUI 桌面前端(gpui-kit),逐步替换 Electron 外壳
+├── ui/                     # Rust/GPUI 桌面前端(gpui-kit),当前默认界面
 ├── rust/                   # Rust 加速:rust-anything 生成的 crate + 录制用例
 │   ├── unmult-rs/          # 去底像素内核的 Rust 移植(PyO3),含 291 条录制与 REPORT.md
 │   ├── icon-export-rs/     # 图标连通域/外接框的 Rust 移植,含 156 条录制与 REPORT.md
@@ -96,9 +118,13 @@ ArtistToolkit/
 
 ### 架构:Electron 界面 + Python 抠图引擎
 
-- **界面**:Electron(`app/`,Web 技术,现代美观);每个 TAB 页 = `tools/<name>/frontend/` 一个脚本,经 `registerPage` 注册到外壳。
-- **引擎**:Python(`tools/<name>/core.py`)打包成独立 exe(`dist/ArtistToolkit-backend.exe`),Electron 主进程 spawn 它,stdio 逐行 JSON 通信,进程常驻(rembg 模型只加载一次)。
-- **开发运行**:`cd app && npm start`(无后端 exe 时自动退回 `python backend.py`)。
+- **界面(默认)**:Rust + [gpui-kit](https://github.com/longbridge/gpui-kit) 的原生桌面界面(`ui/`),
+  五个页签全部完成;通过 stdio JSON 复用同一个 Python 后端。详见 `ui/README.md`。
+- **界面(旧版)**:Electron(`app/`,Web 技术);每个 TAB 页 = `tools/<name>/frontend/` 一个脚本,
+  经 `registerPage` 注册到外壳。保留用于对照与回退(`start-electron.bat`)。
+- **引擎**:Python(`tools/<name>/core.py`)打包成独立 exe(`dist/ArtistToolkit-backend.exe`),
+  前端 spawn 它,stdio 逐行 JSON 通信,进程常驻(rembg 模型只加载一次)。
+- **开发运行**:GPUI 版 `cd ui && cargo run`;Electron 版 `cd app && npm start`(无后端 exe 时自动退回 `python backend.py`)。
 
 ### Rust 加速:去底内核 + 图标拆分
 

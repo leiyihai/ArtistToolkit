@@ -12,3 +12,5 @@ reasonix.toml
 node_modules/
 *.log
 /models/
+
+dist-gpui/

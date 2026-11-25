@@ -1,9 +1,10 @@
-# 启动 GPUI 应用 → 置顶 → 截屏 → 退出。用于验证界面改动的渲染结果。
+﻿# 启动 GPUI 应用 → 置顶 → 截屏 → 退出。用于验证界面改动的渲染结果。
 # 用法: powershell -File ui\scripts\screenshot.ps1 [-Out E:\ArtistToolkit\ui\_shot.png] [-Wait 8]
 param(
     [string]$Exe = (Join-Path $PSScriptRoot '..\target\debug\artist-toolkit-ui.exe'),
     [string]$Out = (Join-Path $PSScriptRoot '..\_shot.png'),
-    [int]$Wait = 8
+    [int]$Wait = 8,
+    [switch]$ReportChildren
 )
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -27,6 +28,11 @@ if ($handle -eq [IntPtr]::Zero) { Write-Error '窗口没起来(进程可能已�
 [WindowTools]::SetWindowPos($handle, [IntPtr](-1), 0, 0, 0, 0, 0x0001 -bor 0x0002) | Out-Null  # TOPMOST,不改变大小/位置
 [WindowTools]::SetForegroundWindow($handle) | Out-Null
 Start-Sleep -Seconds 2
+
+if ($ReportChildren) {
+    Get-CimInstance Win32_Process -Filter "ParentProcessId=$($process.Id)" |
+        Select-Object Name, ProcessId, ExecutablePath | Format-Table -AutoSize | Out-String | Write-Output
+}
 
 $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
