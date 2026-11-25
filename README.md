@@ -117,6 +117,9 @@ Python 接口与界面都不变,`process_batch` 只在内部换成 Rust 实现:
 - **开关**:`RUST_ANYTHING_MODE=old`(或 `RUST_ANYTHING_UNIT_<NAME>=original`)回到 Python 实现;
   打包环境没有 `.pyd` 时也会自动回退,不影响 `build.bat` 产物。
 - **改 Rust 后**:`rust-anything build <crate>` 重新编译(需要 Rust 1.97+ 与 MSVC Build Tools)。
+- **打包**:`ArtistToolkit-backend.spec` 会把两个 `.pyd` 按 `rust/<crate>/python/<module>` 收进
+  PyInstaller 包,所以 `dist/ArtistToolkit-backend.exe` 里同样走 Rust;没编译扩展时自动回退 Python。
+  想确认包内用的是 Rust(缺扩展会直接报错而不是回退):`RUST_ANYTHING_MODE=new dist\ArtistToolkit-backend.exe`。
 
 进度与后续单位(批量缩放、抠图、HDRI 切图等)见 `rust/PORT_MAP.md` 与 `docs/rust-migration-plan.md`。
 
