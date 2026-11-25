@@ -9,8 +9,15 @@ PIL/OpenCV/ONNX/Blender 这些「IO 与三方库」继续留在 Python,只把「
 
 | 内核 | 源位置 | crate | 作用 | 录制 | 实测加速 |
 | --- | --- | --- | --- | ---: | --- |
-| `unmult_rgba` | `tools/unmult/core.py` | [unmult-rs](unmult-rs) | 去底:反预乘 + 3×3 去边 | 291 | 约 21× |
-| `segment_component_boxes` | `tools/icon_export/core.py` | [icon-export-rs](icon-export-rs) | Alpha 连通域 + 外接框(替代 scipy 标号 + 每个连通域全图扫描) | 156 | 约 3.9× |
+| `unmult_rgba` | `tools/unmult/core.py` | [unmult-rs](unmult-rs) | 去底:反预乘 + 3×3 去边 | 291 | 约 21×(内核) |
+| `segment_component_boxes` | `tools/icon_export/core.py` | [icon-export-rs](icon-export-rs) | Alpha 连通域 + 外接框(替代 scipy 标号 + 每个连通域全图扫描) | 156 | 约 3.9×(内核) |
+
+端到端(含 PIL 读写与未移植部分,`RUST_ANYTHING_MODE=new` vs `old`,输出逐字节一致):
+
+| 场景 | Python | Rust | 加速 |
+| --- | ---: | ---: | ---: |
+| 图标批处理:1600×1600 图集、100 个图标、两种尺寸、圆角方形 | 1.310 s | 0.575 s | **2.28×** |
+| 去底:1024×1024、黑底、defringe=0.5 | 0.307 s | 0.065 s | **4.72×** |
 
 进度与待移植单位见 [PORT_MAP.md](PORT_MAP.md);逐单位排序的迁移计划见
 [../docs/rust-migration-plan.md](../docs/rust-migration-plan.md)。
