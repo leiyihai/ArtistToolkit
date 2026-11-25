@@ -17,6 +17,7 @@ use gpui_kit::*;
 use backend::Backend;
 use pages::ai_matting::AiMattingState;
 use pages::icon_export::IconExportState;
+use pages::image_resize::ImageResizeState;
 use pages::unmult::UnmultState;
 
 /// 左侧页签,顺序与 Electron 版 `app/renderer/features.js` 一致。
@@ -75,6 +76,7 @@ pub enum JobKind {
     Unmult,
     IconExport,
     Matting,
+    Resize,
 }
 
 pub struct Shell {
@@ -83,6 +85,7 @@ pub struct Shell {
     pub unmult: UnmultState,
     pub icon: IconExportState,
     pub matting: AiMattingState,
+    pub resize: ImageResizeState,
     job: Option<(JobKind, u64)>,
     ping_id: Option<u64>,
     /// 后端最近一次状态提示(侧边栏底部)。
@@ -90,7 +93,7 @@ pub struct Shell {
 }
 
 impl Shell {
-    fn new(cx: &mut Context<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let root = backend::repo_root();
         let (backend, rx) = match Backend::spawn(&root) {
             Ok(pair) => pair,
@@ -112,6 +115,7 @@ impl Shell {
             unmult: UnmultState::default(),
             icon: IconExportState::default(),
             matting: AiMattingState::default(),
+            resize: ImageResizeState::new(window, cx),
             job: None,
             ping_id: None,
             status: "后端连接中…".to_string(),
@@ -137,6 +141,7 @@ impl Shell {
                     Tab::IconExport => shell.run_icon_export(cx),
                     Tab::Unmult => shell.run_unmult(cx),
                     Tab::AiMatting => shell.run_matting(cx),
+                    Tab::ImageResize => shell.run_resize(cx),
                     _ => {}
                 });
             })
@@ -150,6 +155,7 @@ impl Shell {
             JobKind::Unmult => self.unmult.push_log(text),
             JobKind::IconExport => self.icon.push_log(text),
             JobKind::Matting => self.matting.push_log(text),
+            JobKind::Resize => self.resize.push_log(text),
         }
     }
 
@@ -181,6 +187,7 @@ impl Shell {
                     match kind {
                         JobKind::Unmult => self.unmult.progress = (done, total),
                         JobKind::Matting => self.matting.progress = (done, total),
+                        JobKind::Resize => self.resize.progress = (done, total),
                         JobKind::IconExport => {}
                     }
                 }
@@ -214,6 +221,7 @@ impl Shell {
             JobKind::Unmult => self.unmult.running = running,
             JobKind::IconExport => self.icon.running = running,
             JobKind::Matting => self.matting.running = running,
+            JobKind::Resize => self.resize.running = running,
         }
     }
 
@@ -286,6 +294,7 @@ impl Render for Shell {
             Tab::Unmult => self.unmult_view(cx).into_any_element(),
             Tab::IconExport => self.icon_view(cx).into_any_element(),
             Tab::AiMatting => self.matting_view(cx).into_any_element(),
+            Tab::ImageResize => self.resize_view(cx).into_any_element(),
             other => placeholder(other, cx).into_any_element(),
         };
         h_flex()
@@ -347,7 +356,7 @@ fn main() {
             window_bounds: Some(WindowBounds::centered(None, size(px(1180.), px(760.)), cx)),
             ..Default::default()
         };
-        gpui_kit::open_window(options, cx, |_, cx| cx.new(Shell::new))
+        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| Shell::new(window, cx)))
             .expect("failed to open window");
     });
 }

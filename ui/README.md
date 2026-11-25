@@ -2,6 +2,7 @@
 
 ![图标批处理页](docs/screenshot-icon.png)
 ![AI 抠图页](docs/screenshot-matting.png)
+![批量缩放页](docs/screenshot-resize.png)
 ![去底页](docs/screenshot.png)
 
 用 [gpui-kit](https://github.com/longbridge/gpui-kit)(GPUI 组件库)重写的桌面界面,
@@ -14,7 +15,7 @@
 | 图标批处理 | ✅ 已迁移(选图/裁切类型/尺寸/圆角/统一大小/日志,端到端可用) |
 | 去底 | ✅ 已迁移(选图/模式/去边/进度/日志,端到端可用) |
 | AI 抠图 | ✅ 已迁移(选图/输出目录/进度/日志,端到端可用) |
-| 批量缩放 | ⏳ 占位 |
+| 批量缩放 | ✅ 已迁移(输入/输出目录、目标尺寸、等比模式、取消、进度与日志) |
 | HDRI 转天空盒 | ⏳ 占位 |
 
 界面外壳(侧边栏、页签、主题、中文渲染)已完成;Electron 版仍可继续用(`start.bat`)。
