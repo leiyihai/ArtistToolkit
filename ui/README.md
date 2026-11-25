@@ -1,5 +1,7 @@
 # ArtistToolkit · Rust/GPUI 前端
 
+![去底页截图](docs/screenshot.png)
+
 用 [gpui-kit](https://github.com/longbridge/gpui-kit)(GPUI 组件库)重写的桌面界面,
 目标是逐步替换掉 Electron 外壳。
 
