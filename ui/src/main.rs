@@ -15,6 +15,7 @@ use gpui_kit::component::{
 use gpui_kit::*;
 
 use backend::Backend;
+use pages::ai_matting::AiMattingState;
 use pages::icon_export::IconExportState;
 use pages::unmult::UnmultState;
 
@@ -73,6 +74,7 @@ impl Tab {
 pub enum JobKind {
     Unmult,
     IconExport,
+    Matting,
 }
 
 pub struct Shell {
@@ -80,6 +82,7 @@ pub struct Shell {
     backend: Backend,
     pub unmult: UnmultState,
     pub icon: IconExportState,
+    pub matting: AiMattingState,
     job: Option<(JobKind, u64)>,
     ping_id: Option<u64>,
     /// 后端最近一次状态提示(侧边栏底部)。
@@ -94,16 +97,21 @@ impl Shell {
             Err(error) => panic!("无法启动 Python 后端({}):{error}", root.display()),
         };
         let mut shell = Self {
-            tab: if cfg!(debug_assertions)
-                && std::env::var("ATK_UI_TAB").ok().as_deref() == Some("icon")
-            {
-                Tab::IconExport
+            tab: if cfg!(debug_assertions) {
+                match std::env::var("ATK_UI_TAB").ok().as_deref() {
+                    Some("icon") => Tab::IconExport,
+                    Some("matting") => Tab::AiMatting,
+                    Some("resize") => Tab::ImageResize,
+                    Some("img2box") => Tab::Img2Box,
+                    _ => Tab::Unmult,
+                }
             } else {
                 Tab::Unmult
             },
             backend,
             unmult: UnmultState::default(),
             icon: IconExportState::default(),
+            matting: AiMattingState::default(),
             job: None,
             ping_id: None,
             status: "后端连接中…".to_string(),
@@ -128,6 +136,7 @@ impl Shell {
                 let _ = this.update(cx, |shell, cx| match shell.tab {
                     Tab::IconExport => shell.run_icon_export(cx),
                     Tab::Unmult => shell.run_unmult(cx),
+                    Tab::AiMatting => shell.run_matting(cx),
                     _ => {}
                 });
             })
@@ -140,6 +149,7 @@ impl Shell {
         match kind {
             JobKind::Unmult => self.unmult.push_log(text),
             JobKind::IconExport => self.icon.push_log(text),
+            JobKind::Matting => self.matting.push_log(text),
         }
     }
 
@@ -165,10 +175,14 @@ impl Shell {
             Some("progress") => {
                 let done = msg.get("done").and_then(|v| v.as_u64()).unwrap_or(0);
                 let total = msg.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
-                if let Some((JobKind::Unmult, job_id)) = job
+                if let Some((kind, job_id)) = job
                     && Some(job_id) == id
                 {
-                    self.unmult.progress = (done, total);
+                    match kind {
+                        JobKind::Unmult => self.unmult.progress = (done, total),
+                        JobKind::Matting => self.matting.progress = (done, total),
+                        JobKind::IconExport => {}
+                    }
                 }
             }
             Some("stderr") => {
@@ -195,36 +209,29 @@ impl Shell {
         }
     }
 
+    fn set_running(&mut self, kind: JobKind, running: bool) {
+        match kind {
+            JobKind::Unmult => self.unmult.running = running,
+            JobKind::IconExport => self.icon.running = running,
+            JobKind::Matting => self.matting.running = running,
+        }
+    }
+
     fn run_finished(&mut self, kind: JobKind, msg: &serde_json::Value, ok: bool) {
         let result = msg.get("result").cloned().unwrap_or_default();
-        match kind {
-            JobKind::Unmult => {
-                self.unmult.running = false;
-                if ok {
-                    self.unmult.push_log(format!("完成:{result}"));
-                } else {
-                    let error = msg.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
-                    self.unmult.push_log(format!("失败:{error}"));
-                }
-            }
-            JobKind::IconExport => {
-                self.icon.running = false;
-                if ok {
-                    self.icon.push_log(format!("完成:{result}"));
-                } else {
-                    let error = msg.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
-                    self.icon.push_log(format!("失败:{error}"));
-                }
-            }
-        }
-        self.status = if ok {
-            "处理完成".to_string()
+        let error = msg
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("未知错误")
+            .to_string();
+        self.set_running(kind, false);
+        if ok {
+            self.job_log(kind, format!("完成:{result}"));
+            self.status = "处理完成".to_string();
         } else {
-            format!(
-                "失败:{}",
-                msg.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误")
-            )
-        };
+            self.job_log(kind, format!("失败:{error}"));
+            self.status = format!("失败:{error}");
+        }
         self.job = None;
     }
 
@@ -236,10 +243,6 @@ impl Shell {
     ) -> u64 {
         let id = self.backend.request(cmd, extra);
         self.job = Some((kind, id));
-        match kind {
-            JobKind::Unmult => self.unmult.job_id = Some(id),
-            JobKind::IconExport => self.icon.job_id = Some(id),
-        }
         id
     }
 
@@ -282,6 +285,7 @@ impl Render for Shell {
         let body = match self.tab {
             Tab::Unmult => self.unmult_view(cx).into_any_element(),
             Tab::IconExport => self.icon_view(cx).into_any_element(),
+            Tab::AiMatting => self.matting_view(cx).into_any_element(),
             other => placeholder(other, cx).into_any_element(),
         };
         h_flex()

@@ -35,6 +35,11 @@ impl Backend {
             .stderr(Stdio::piped())
             .env("PYTHONIOENCODING", "utf-8")
             .env("PYTHONUTF8", "1");
+        // 与 Electron 版一致:优先用仓库内自带模型(免下载)。
+        let models = root.join("models");
+        if models.join("birefnet-general.onnx").is_file() {
+            cmd.env("ATK_MODELS_DIR", &models);
+        }
 
         let mut child = cmd.spawn()?;
         let stdin = child.stdin.take().expect("stdin piped");

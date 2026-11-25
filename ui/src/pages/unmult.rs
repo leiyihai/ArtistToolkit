@@ -46,7 +46,6 @@ pub struct UnmultState {
     pub running: bool,
     pub progress: (u64, u64),
     pub logs: Vec<String>,
-    pub job_id: Option<u64>,
 }
 
 impl Default for UnmultState {
@@ -82,7 +81,6 @@ impl Default for UnmultState {
             running: false,
             progress: (0, 0),
             logs: Vec::new(),
-            job_id: None,
         }
     }
 }

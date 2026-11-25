@@ -54,7 +54,6 @@ pub struct IconExportState {
     pub normalize: bool,
     pub running: bool,
     pub logs: Vec<String>,
-    pub job_id: Option<u64>,
 }
 
 impl Default for IconExportState {
@@ -91,7 +90,6 @@ impl Default for IconExportState {
             normalize: false,
             running: false,
             logs: Vec::new(),
-            job_id: None,
         }
     }
 }
