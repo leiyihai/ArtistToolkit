@@ -322,8 +322,7 @@ impl Shell {
             "rebuild_alpha": self.unmult.rebuild_alpha,
             "no_overwrite": self.unmult.no_overwrite,
         });
-        let id = self.send("unmult_process", payload);
-        self.unmult.job_id = Some(id);
+        self.send_job(crate::JobKind::Unmult, "unmult_process", payload);
         self.unmult.running = true;
         self.unmult.progress = (0, paths.len() as u64);
         self.unmult.push_log(format!("开始处理 {} 张图片…", paths.len()));

@@ -15,6 +15,7 @@ use gpui_kit::component::{
 use gpui_kit::*;
 
 use backend::Backend;
+use pages::icon_export::IconExportState;
 use pages::unmult::UnmultState;
 
 /// 左侧页签,顺序与 Electron 版 `app/renderer/features.js` 一致。
@@ -67,10 +68,19 @@ impl Tab {
     }
 }
 
+/// 当前在跑的任务属于哪一页,用于把后端的 log/progress 送回正确的页。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum JobKind {
+    Unmult,
+    IconExport,
+}
+
 pub struct Shell {
     tab: Tab,
     backend: Backend,
     pub unmult: UnmultState,
+    pub icon: IconExportState,
+    job: Option<(JobKind, u64)>,
     ping_id: Option<u64>,
     /// 后端最近一次状态提示(侧边栏底部)。
     pub status: String,
@@ -84,9 +94,17 @@ impl Shell {
             Err(error) => panic!("无法启动 Python 后端({}):{error}", root.display()),
         };
         let mut shell = Self {
-            tab: Tab::Unmult,
+            tab: if cfg!(debug_assertions)
+                && std::env::var("ATK_UI_TAB").ok().as_deref() == Some("icon")
+            {
+                Tab::IconExport
+            } else {
+                Tab::Unmult
+            },
             backend,
             unmult: UnmultState::default(),
+            icon: IconExportState::default(),
+            job: None,
             ping_id: None,
             status: "后端连接中…".to_string(),
         };
@@ -103,15 +121,26 @@ impl Shell {
             }
         })
         .detach();
-        // 开发期自动化:ATK_UI_IMAGES 预填图片 + ATK_UI_AUTORUN 直接开跑,便于截图验证。
+        // 开发期自动化:ATK_UI_IMAGES 预填图片 + ATK_UI_TAB 选页 + ATK_UI_AUTORUN 直接开跑。
         if cfg!(debug_assertions) && std::env::var_os("ATK_UI_AUTORUN").is_some() {
             cx.spawn(async move |this, cx| {
                 smol::Timer::after(std::time::Duration::from_millis(900)).await;
-                let _ = this.update(cx, |shell, cx| shell.run_unmult(cx));
+                let _ = this.update(cx, |shell, cx| match shell.tab {
+                    Tab::IconExport => shell.run_icon_export(cx),
+                    Tab::Unmult => shell.run_unmult(cx),
+                    _ => {}
+                });
             })
             .detach();
         }
         shell
+    }
+
+    fn job_log(&mut self, kind: JobKind, text: impl Into<String>) {
+        match kind {
+            JobKind::Unmult => self.unmult.push_log(text),
+            JobKind::IconExport => self.icon.push_log(text),
+        }
     }
 
     /// 把后端输出的每一行转成界面状态。
@@ -123,17 +152,22 @@ impl Shell {
             return;
         };
         let id = msg.get("id").and_then(|v| v.as_u64());
+        let job = self.job;
         match msg.get("event").and_then(|v| v.as_str()) {
             Some("log") => {
                 let text = msg.get("message").and_then(|v| v.as_str()).unwrap_or("");
-                if id == self.unmult.job_id {
-                    self.unmult.push_log(text);
+                if let Some((kind, job_id)) = job
+                    && Some(job_id) == id
+                {
+                    self.job_log(kind, text);
                 }
             }
             Some("progress") => {
                 let done = msg.get("done").and_then(|v| v.as_u64()).unwrap_or(0);
                 let total = msg.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
-                if id == self.unmult.job_id {
+                if let Some((JobKind::Unmult, job_id)) = job
+                    && Some(job_id) == id
+                {
                     self.unmult.progress = (done, total);
                 }
             }
@@ -152,24 +186,61 @@ impl Shell {
                     } else {
                         "后端无响应".to_string()
                     };
-                } else if id.is_some() && id == self.unmult.job_id {
-                    self.unmult.running = false;
-                    if ok {
-                        let result = msg.get("result").cloned().unwrap_or_default();
-                        self.unmult.push_log(format!("完成:{result}"));
-                        self.status = "处理完成".into();
-                    } else {
-                        let error = msg.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
-                        self.unmult.push_log(format!("失败:{error}"));
-                        self.status = format!("失败:{error}");
-                    }
+                } else if let Some((kind, job_id)) = job
+                    && Some(job_id) == id
+                {
+                    self.run_finished(kind, &msg, ok);
                 }
             }
         }
     }
 
-    fn send(&mut self, cmd: &str, extra: serde_json::Value) -> u64 {
-        self.backend.request(cmd, extra)
+    fn run_finished(&mut self, kind: JobKind, msg: &serde_json::Value, ok: bool) {
+        let result = msg.get("result").cloned().unwrap_or_default();
+        match kind {
+            JobKind::Unmult => {
+                self.unmult.running = false;
+                if ok {
+                    self.unmult.push_log(format!("完成:{result}"));
+                } else {
+                    let error = msg.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
+                    self.unmult.push_log(format!("失败:{error}"));
+                }
+            }
+            JobKind::IconExport => {
+                self.icon.running = false;
+                if ok {
+                    self.icon.push_log(format!("完成:{result}"));
+                } else {
+                    let error = msg.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
+                    self.icon.push_log(format!("失败:{error}"));
+                }
+            }
+        }
+        self.status = if ok {
+            "处理完成".to_string()
+        } else {
+            format!(
+                "失败:{}",
+                msg.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误")
+            )
+        };
+        self.job = None;
+    }
+
+    pub(crate) fn send_job(
+        &mut self,
+        kind: JobKind,
+        cmd: &str,
+        extra: serde_json::Value,
+    ) -> u64 {
+        let id = self.backend.request(cmd, extra);
+        self.job = Some((kind, id));
+        match kind {
+            JobKind::Unmult => self.unmult.job_id = Some(id),
+            JobKind::IconExport => self.icon.job_id = Some(id),
+        }
+        id
     }
 
     fn sidebar(&self, cx: &mut Context<Self>) -> Sidebar<SidebarGroup<SidebarMenu>> {
@@ -210,6 +281,7 @@ impl Render for Shell {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = match self.tab {
             Tab::Unmult => self.unmult_view(cx).into_any_element(),
+            Tab::IconExport => self.icon_view(cx).into_any_element(),
             other => placeholder(other, cx).into_any_element(),
         };
         h_flex()
@@ -252,13 +324,13 @@ fn placeholder(tab: Tab, cx: &mut Context<Shell>) -> impl IntoElement {
         .child(
             div()
                 .text_color(cx.theme().muted_foreground)
-                .child("这一页还没搬到 GPUI。当前版本先打通「去底」页(界面 + 后端 + Rust 内核)。"),
+                .child("这一页还没搬到 GPUI。当前已迁移「去底」与「图标批处理」。"),
         )
         .child(
             div()
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child("Electron 版仍可用:start.bat;逐页移植进度见 rust/PORT_MAP.md。"),
+                .child("Electron 版仍可用:start.bat;逐页移植进度见 ui/README.md。"),
         )
 }
 
@@ -268,7 +340,7 @@ fn main() {
         gpui_kit::init(cx);
 
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(None, size(px(1100.), px(720.)), cx)),
+            window_bounds: Some(WindowBounds::centered(None, size(px(1180.), px(760.)), cx)),
             ..Default::default()
         };
         gpui_kit::open_window(options, cx, |_, cx| cx.new(Shell::new))
