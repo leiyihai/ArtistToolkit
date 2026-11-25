@@ -190,14 +190,17 @@ def segment_icons(img):
     import numpy as np
     rgba = img if img.mode == "RGBA" else img.convert("RGBA")
     width, height = rgba.size
-    flat = segment_component_boxes(rgba.tobytes(), width, height)
-    mask = np.array(rgba)[:, :, 3] > 10
+    data = rgba.tobytes()
+    flat = segment_component_boxes(data, width, height)
+    mask = None  # 只有出现超大块(要按网格缝隙再切分)时才需要整幅掩码
 
     boxes = []
     for k in range(0, len(flat), 4):
         x1, y1, x2, y2 = flat[k], flat[k + 1], flat[k + 2], flat[k + 3]
         # 疑似图标集(尺寸大)→ 检测网格缝隙再切分
         if (x2 - x1) > 300 or (y2 - y1) > 300:
+            if mask is None:  # np.frombuffer 零拷贝,只产出 bool 掩码
+                mask = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 4)[:, :, 3] > 10
             sub = mask[y1:y2 + 1, x1:x2 + 1]
             for bx1, by1, bx2, by2 in split_by_gaps(sub):
                 boxes.append((x1 + bx1, y1 + by1, x1 + bx2, y1 + by2))

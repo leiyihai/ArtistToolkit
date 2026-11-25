@@ -1,6 +1,6 @@
 # Port map: ArtistToolkit
 
-2 of 12 units have a Rust port; no original changed since it was recorded.
+2 of 11 units have a Rust port; no original changed since it was recorded.
 
 ## Ports
 
@@ -15,7 +15,6 @@ In the order `analyze` suggests.
 
 | Unit | Status | Lines | Exports | Readiness |
 | --- | --- | ---: | ---: | ---: |
-| `_icon_equiv.py` | ready | 106 | 8 | 72 |
 | `check_pack.py` | ready | 43 | 2 | 100 |
 | `tools/img2box/` | ready | 213 | 7 | 73 |
 | `tools/icon_export/legacy/` | ready | 289 | 6 | 69 |
