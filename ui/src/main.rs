@@ -14,6 +14,8 @@ use gpui_kit::component::{
 };
 use gpui_kit::*;
 
+use std::path::{Path, PathBuf};
+
 use backend::Backend;
 use pages::ai_matting::AiMattingState;
 use pages::icon_export::IconExportState;
@@ -134,6 +136,18 @@ impl Shell {
             status: "后端连接中…".to_string(),
         };
         shell.ping_id = Some(shell.backend.request("ping", serde_json::json!({})));
+        // 开发期自动化:ATK_UI_DROP="a.png;b.png" 走与拖放完全相同的处理函数(仅 debug 构建生效)。
+        if cfg!(debug_assertions)
+            && let Ok(list) = std::env::var("ATK_UI_DROP")
+        {
+            let paths: Vec<PathBuf> = list
+                .split(';')
+                .filter(|part| !part.is_empty())
+                .map(PathBuf::from)
+                .collect();
+            let tab = shell.tab;
+            shell.accept_drop(tab, paths, cx);
+        }
         cx.spawn(async move |this, cx| {
             while let Ok(line) = rx.recv().await {
                 let alive = this.update(cx, |shell, cx| {
@@ -166,6 +180,72 @@ impl Shell {
             .detach();
         }
         shell
+    }
+
+    /// 各页顶部的拖放提示条(拖放监听挂在页面根元素上)。
+    pub(crate) fn drop_banner(
+        &self,
+        theme: &gpui_kit::component::Theme,
+        text: &str,
+    ) -> impl IntoElement {
+        div()
+            .w_full()
+            .p_2()
+            .rounded(theme.radius)
+            .border_1()
+            .border_color(theme.border)
+            .bg(theme.muted)
+            .text_sm()
+            .text_color(theme.muted_foreground)
+            .child(text.to_string())
+    }
+
+    /// 接受一次文件拖放(来自 `on_drop`,或开发期 `ATK_UI_DROP`)。
+    pub(crate) fn accept_drop(&mut self, tab: Tab, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        let images: Vec<PathBuf> = paths.iter().filter(|path| is_image(path)).cloned().collect();
+        match tab {
+            Tab::ImageResize => {
+                let dir = paths
+                    .iter()
+                    .find(|path| path.is_dir())
+                    .cloned()
+                    .or_else(|| {
+                        images
+                            .first()
+                            .and_then(|path| path.parent())
+                            .map(Path::to_path_buf)
+                    });
+                match dir {
+                    Some(dir) => {
+                        self.resize.input_dir = dir.display().to_string();
+                        let text = format!("拖入目录:{}", self.resize.input_dir);
+                        self.resize.push_log(text);
+                    }
+                    None => self.resize.push_log("拖入的内容里没有文件夹。"),
+                }
+            }
+            Tab::Img2Box => match images.first() {
+                Some(first) => {
+                    self.img2box.hdri = first.display().to_string();
+                    let text = format!("拖入 HDRI:{}", first.display());
+                    self.img2box.push_log(text);
+                }
+                None => self.img2box.push_log("拖入的内容里没有图片。"),
+            },
+            Tab::Unmult => {
+                let added = append_images(&mut self.unmult.paths, images);
+                self.unmult.push_log(format!("拖入 {added} 张图片"));
+            }
+            Tab::IconExport => {
+                let added = append_images(&mut self.icon.paths, images);
+                self.icon.push_log(format!("拖入 {added} 张图片"));
+            }
+            Tab::AiMatting => {
+                let added = append_images(&mut self.matting.paths, images);
+                self.matting.push_log(format!("拖入 {added} 张图片"));
+            }
+        }
+        cx.notify();
     }
 
     fn job_log(&mut self, kind: JobKind, text: impl Into<String>) {
@@ -395,6 +475,33 @@ impl Render for Shell {
     }
 }
 
+fn is_image(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_ascii_lowercase())
+            .as_deref(),
+        Some("png" | "jpg" | "jpeg" | "webp" | "tif" | "tiff" | "bmp")
+    )
+}
+
+/// 追加图片路径,按小写全路径去重;返回新增数量。
+fn append_images(existing: &mut Vec<PathBuf>, images: Vec<PathBuf>) -> usize {
+    let mut seen: Vec<String> = existing
+        .iter()
+        .map(|path| path.to_string_lossy().to_lowercase())
+        .collect();
+    let before = existing.len();
+    for path in images {
+        let key = path.to_string_lossy().to_lowercase();
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        existing.push(path);
+    }
+    existing.len() - before
+}
 fn main() {
     let app = gpui_kit::application().with_assets(Assets);
     app.run(move |cx| {

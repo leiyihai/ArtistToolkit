@@ -106,6 +106,14 @@ impl Shell {
             .min_h_0()
             .gap_3()
             .p_4()
+            .id("resize-page")
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                this.accept_drop(crate::Tab::ImageResize, paths.0.to_vec(), cx)
+            }))
+            .child(self.drop_banner(
+                &theme,
+                "拖拽文件夹到这里作为输入目录,或点「输入目录…」",
+            ))
             .child(
                 h_flex()
                     .gap_2()

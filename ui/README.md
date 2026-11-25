@@ -15,14 +15,17 @@
 
 | 页签 | 状态 | 后端命令 |
 | --- | --- | --- |
-| 图标批处理 | ✅ 选图/裁切类型/尺寸/圆角/统一大小/日志 | `icon_process` |
-| AI 抠图 | ✅ 选图/输出目录/进度/日志 | `matting_process` |
-| 批量缩放 | ✅ 输入输出目录/目标尺寸/等比模式/取消/进度 | `resize_process`、`resize_cancel` |
-| 去底 | ✅ 选图/模式/去边/重建 Alpha/进度 | `unmult_process` |
-| HDRI 转天空盒 | ✅ HDRI/Blender 自动探测/烘焙/预览 | `img2box_process`、`img2box_find_blender`、`img2box_preview` |
+| 图标批处理 | ✅ 拖拽/选图/裁切类型/尺寸/圆角/统一大小/日志 | `icon_process` |
+| AI 抠图 | ✅ 拖拽/选图/输出目录/进度/日志 | `matting_process` |
+| 批量缩放 | ✅ 拖拽文件夹/输入输出目录/目标尺寸/等比模式/取消/进度 | `resize_process`、`resize_cancel` |
+| 去底 | ✅ 拖拽/选图/模式/去边/重建 Alpha/进度 | `unmult_process` |
+| HDRI 转天空盒 | ✅ 拖拽 HDRI/Blender 自动探测/烘焙/预览 | `img2box_process`、`img2box_find_blender`、`img2box_preview` |
+
+**拖拽**:每页顶部有提示条,把文件直接拖进窗口即可(与 Electron 版一致)——图片页追加图片并按路径去重,
+批量缩放接受文件夹作为输入目录,天空盒取第一张图片作为 HDRI。截图:[去底页拖入 2 张](docs/screenshot-drop.png)。
 
 界面外壳(侧边栏、页签、主题、中文字体、后端连接状态)已完成;Electron 版仍保留
-(`start.bat`),方便对照与回退。
+(`start-electron.bat`),方便对照与回退。
 
 ## 架构
 
@@ -67,6 +70,7 @@ start-electron.bat # 旧版 Electron 界面
 # 预填 + 自动开跑,截图后退出
 $env:ATK_UI_TAB='icon'                              # icon / matting / resize / unmult / img2box
 $env:ATK_UI_IMAGES='E:\path\a.png;E:\path\b.png'    # 图标批处理/抠图/去底 预填图片
+$env:ATK_UI_DROP='E:\path\a.png;E:\path\b.png'      # 模拟一次拖放(与真实拖放走同一个处理函数)
 $env:ATK_UI_RESIZE_IN='E:\path\images'              # 批量缩放 预填输入目录
 $env:ATK_UI_HDRI='E:\path\pano.png'                 # 天空盒 预填 HDRI
 $env:ATK_UI_BLENDER='C:\blender-5.1.2-windows-x64\blender.exe'

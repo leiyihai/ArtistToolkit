@@ -95,6 +95,14 @@ impl Shell {
             .min_h_0()
             .gap_3()
             .p_4()
+            .id("img2box-page")
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                this.accept_drop(crate::Tab::Img2Box, paths.0.to_vec(), cx)
+            }))
+            .child(self.drop_banner(
+                &theme,
+                "拖拽 HDRI 图片到这里(单张),或点「选择图片…」",
+            ))
             .child(
                 h_flex()
                     .gap_2()
