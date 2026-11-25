@@ -1,0 +1,67 @@
+{
+  "schema": "rust-anything/bridge@1",
+  "root": "E:\\ArtistToolkit",
+  "unit": "tools/unmult/",
+  "language": "python",
+  "kind": "pyo3",
+  "crate_name": "unmult-rs",
+  "exports": [
+    {
+      "name": "unmult_rgba",
+      "file": "tools/unmult/core.py",
+      "line": 88,
+      "params": [
+        {
+          "name": "data",
+          "ts_type": "pybytes",
+          "optional": false,
+          "rest": false
+        },
+        {
+          "name": "width",
+          "ts_type": "int",
+          "optional": false,
+          "rest": false
+        },
+        {
+          "name": "height",
+          "ts_type": "int",
+          "optional": false,
+          "rest": false
+        },
+        {
+          "name": "mode",
+          "ts_type": "string",
+          "optional": false,
+          "rest": false
+        },
+        {
+          "name": "defringe_strength",
+          "ts_type": "number",
+          "optional": false,
+          "rest": false
+        },
+        {
+          "name": "rebuild_alpha",
+          "ts_type": "boolean",
+          "optional": false,
+          "rest": false
+        }
+      ],
+      "returns": "pybytes",
+      "is_async": false,
+      "is_generator": false,
+      "type_params": [],
+      "uses_instanceof": false
+    }
+  ],
+  "classes": [],
+  "js_only": [
+    {
+      "name": "process_batch",
+      "file": "tools/unmult/core.py",
+      "line": 145,
+      "reason": "takes log/progress callbacks"
+    }
+  ]
+}

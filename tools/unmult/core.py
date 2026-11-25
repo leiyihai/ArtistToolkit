@@ -4,13 +4,14 @@
 """
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-__all__ = ["MODES", "process_batch"]
+__all__ = ["MODES", "process_batch", "unmult_rgba"]
 
 MODES = ("black", "white", "auto")
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
@@ -80,21 +81,50 @@ def white_unmult(rgb, alpha=None, defringe_strength=0.0, rebuild_alpha=False):
     return clamp01(defringe(recover_from_white(rgb, alpha), alpha, defringe_strength)), clamp01(alpha)
 
 
-# ---------- 图片读写 / 背景判断 ----------
-def load_image(path):
-    """读取图片,返回 (rgb_float[0,1], alpha_float_or_None)。"""
-    with Image.open(path) as im:
-        had_alpha = "A" in im.getbands()
-        arr = np.asarray(im.convert("RGBA"), dtype=np.float32) / 255.0
-    rgb, alpha = arr[..., :3], arr[..., 3] if had_alpha else None
-    if alpha is not None and alpha.min() >= 0.999:  # 有通道但完全不透明 → 视为无 Alpha
+# ---------- 像素内核(纯字节进出,无 IO) ----------
+# 单独成段的理由:rust-anything 的 PyO3 桥接只接受字节/数字/字符串这类可跨界类型,
+# PIL/numpy 对象不能跨界。本函数只做「像素进 → 像素出」,所以能整段移植到 Rust
+# (rust/unmult-rs),而图片读写与批处理编排留在 Python。
+def unmult_rgba(data: bytes, width: int, height: int, mode: str,
+                defringe_strength: float, rebuild_alpha: bool) -> bytes:
+    """RGBA8 字节 → 去底后的 RGBA8 字节;与 process_batch 的逐张流程等价。
+
+    黑底:Alpha≈max(R,G,B),C_straight = C_premult / Alpha;
+    白底:Alpha≈1-min(R,G,B),C_straight = (C_premult - (1-Alpha)) / Alpha。
+    """
+    if mode not in ("black", "white"):
+        raise ValueError(f"未知模式: {mode},可选 black/white")
+    if width <= 0 or height <= 0:
+        raise ValueError("尺寸必须为正整数")
+    if not math.isfinite(defringe_strength):
+        raise ValueError("defringe 必须是有限数值")
+    expected = width * height * 4
+    if len(data) != expected:
+        raise ValueError(f"数据长度应为 {expected}({width}×{height}×4),实际 {len(data)}")
+
+    arr = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 4).astype(np.float32) / 255.0
+    rgb = arr[..., :3]
+    alpha = arr[..., 3]
+    if alpha.min() >= 0.999:  # 有通道但完全不透明 → 视为无 Alpha(与原 load_image 一致)
         alpha = None
-    return rgb, alpha
+    unmix = black_unmult if mode == "black" else white_unmult
+    rgb_out, a = unmix(rgb, alpha, defringe_strength, rebuild_alpha)
+    rgba = np.clip(np.round(np.concatenate([rgb_out, a[..., None]], axis=-1) * 255.0), 0, 255)
+    return rgba.astype(np.uint8).tobytes()
 
 
-def save_png(rgba, path):
-    rgba8 = np.clip(np.round(rgba * 255.0), 0, 255).astype(np.uint8)
-    Image.fromarray(rgba8, mode="RGBA").save(path, format="PNG")
+# ---------- 图片读写 / 背景判断 ----------
+def load_rgba_bytes(path):
+    """读取图片并归一化为 RGBA8 字节;返回 (字节, (宽, 高))。"""
+    with Image.open(path) as im:
+        rgba = im.convert("RGBA")
+        return rgba.tobytes(), rgba.size
+
+
+def rgba_to_float(data, width, height):
+    """RGBA8 字节 → float32 RGB(0..1),供背景判断使用。"""
+    arr = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 4)
+    return arr[..., :3].astype(np.float32) / 255.0
 
 
 def estimate_background(rgb):
@@ -136,16 +166,15 @@ def process_batch(paths, out_dir, mode="auto", defringe=0.0, rebuild_alpha=False
                 progress(ok + failed, total)
             continue
         try:
-            rgb, alpha = load_image(src)
+            data, (w, h) = load_rgba_bytes(src)
             if mode == "auto":
-                bg = estimate_background(rgb)
+                bg = estimate_background(rgba_to_float(data, w, h))
                 if bg == "unknown":
                     raise ValueError("无法自动判断背景颜色,请改选 去黑底 或 去白底")
             else:
                 bg = mode
-            rgb_out, a = (black_unmult if bg == "black" else white_unmult)(
-                rgb, alpha, defringe, rebuild_alpha)
-            save_png(np.concatenate([rgb_out, a[..., None]], axis=-1), out)
+            Image.frombytes("RGBA", (w, h),
+                            unmult_rgba(data, w, h, bg, defringe, rebuild_alpha)).save(out, format="PNG")
             ok += 1
             log(f"[{i}/{total}] {name}  OK({bg})")
         except Exception as e:
@@ -178,11 +207,51 @@ def selftest():
             # auto 判断(纯色背景)
             assert estimate_background(black_bg) == "black"
             assert estimate_background(white_bg) == "white"
+            # 字节内核(process_batch 走的就是这条路径)
+            black_rgba = np.zeros((8, 8, 4), dtype=np.uint8)
+            black_rgba[..., 3] = 255
+            black_rgba[3:5, 3:5, :3] = (255, 51, 51)
+            kernel_out = np.frombuffer(
+                unmult_rgba(black_rgba.tobytes(), 8, 8, "black", 0.0, False), dtype=np.uint8
+            ).reshape(8, 8, 4)
+            assert kernel_out[0, 0, 3] == 0, "内核:黑底区域 Alpha 应为 0"
+            assert kernel_out[3, 3, 3] == 255, "内核:亮红区域 Alpha 应为 255"
+            assert tuple(kernel_out[3, 3, :3]) == (255, 51, 51), "内核:颜色应恢复原值"
+            # 端到端:黑底图 → 透明 PNG
+            Image.new("RGB", (12, 10), (0, 0, 0)).save(os.path.join(tmp, "b.png"))
+            ok_n, failed_n = process_batch([os.path.join(tmp, "b.png")],
+                                           os.path.join(tmp, "out"), mode="black",
+                                           log=lambda _m: None)
+            assert (ok_n, failed_n) == (1, 0), "端到端:黑底图应处理成功"
+            with Image.open(os.path.join(tmp, "out", "b.png")) as done:
+                assert done.mode == "RGBA" and done.getpixel((0, 0))[3] == 0
         return True, "OK"
     except Exception as e:
         return False, str(e)
 
 
+# >>> rust-anything: unmult-rs is on. `rust-anything disable ../../rust/unmult-rs` removes this block.
+def _rust_anything_unmult_rs():
+    import importlib, os, sys
+    mode = os.environ.get("RUST_ANYTHING_MODE")
+    if mode == "old" or os.environ.get("RUST_ANYTHING_UNIT_UNMULT") == "original":
+        return
+    at = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../rust/unmult-rs/python"))
+    sys.path.insert(0, at)
+    try:
+        native = importlib.import_module("unmult_rs")
+    except ImportError:
+        if mode == "new":
+            raise
+        return
+    finally:
+        sys.path.remove(at)
+    globals().update({name: getattr(native, name) for name in ["unmult_rgba"]})
+
+
+_rust_anything_unmult_rs()
+del _rust_anything_unmult_rs
+# <<< rust-anything: unmult-rs
 if __name__ == "__main__":
     ok, msg = selftest()
     print("core self-check:", msg)
