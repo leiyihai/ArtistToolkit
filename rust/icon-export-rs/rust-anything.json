@@ -1,0 +1,61 @@
+{
+  "schema": "rust-anything/bridge@1",
+  "root": "E:\\ArtistToolkit",
+  "unit": "tools/icon_export/",
+  "language": "python",
+  "kind": "pyo3",
+  "crate_name": "icon-export-rs",
+  "exports": [
+    {
+      "name": "segment_component_boxes",
+      "file": "tools/icon_export/core.py",
+      "line": 115,
+      "params": [
+        {
+          "name": "data",
+          "ts_type": "pybytes",
+          "optional": false,
+          "rest": false
+        },
+        {
+          "name": "width",
+          "ts_type": "int",
+          "optional": false,
+          "rest": false
+        },
+        {
+          "name": "height",
+          "ts_type": "int",
+          "optional": false,
+          "rest": false
+        }
+      ],
+      "returns": "int[]",
+      "is_async": false,
+      "is_generator": false,
+      "type_params": [],
+      "uses_instanceof": false
+    }
+  ],
+  "classes": [],
+  "js_only": [
+    {
+      "name": "process_batch",
+      "file": "tools/icon_export/core.py",
+      "line": 428,
+      "reason": "takes a log callback"
+    },
+    {
+      "name": "ImageList",
+      "file": "tools/icon_export/page.py",
+      "line": 28,
+      "reason": "class: inherits from tk.Frame, public attribute `canvas`, public attribute `inner`, public attribute `on_change`, public attribute `paths`, public class attribute `COLS`, public class attribute `THUMB`"
+    },
+    {
+      "name": "ExportPage",
+      "file": "tools/icon_export/page.py",
+      "line": 112,
+      "reason": "class: inherits from ttk.Frame, public attribute `q`, public attribute `running`"
+    }
+  ]
+}

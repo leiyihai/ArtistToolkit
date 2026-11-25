@@ -1,10 +1,10 @@
 # Rust migration plan: ArtistToolkit (Python)
 
-1 package, 17 source files (2009 lines), 1 test file, 0 UI files, grouped into 11 units.
+1 package, 18 source files (2143 lines), 2 test files, 0 UI files, grouped into 12 units.
 
 | Ready | Caution | Blocked | Keep in source language |
 | ---: | ---: | ---: | ---: |
-| 6 | 5 | 0 | 0 |
+| 7 | 5 | 0 | 0 |
 
 ## Start here
 
@@ -13,10 +13,11 @@ Best first ports: safe to port (readiness) and worth porting (loops and string w
 | # | Unit | Lines | Priority | Readiness | Tests | Bridge | Main risks |
 | ---: | --- | ---: | ---: | ---: | ---: | --- | --- |
 | 1 | `tools/unmult/` | 183 | 79 | 73 | 1 | PyO3 | String offsets and slicing (12); Hash iteration order (1); Dynamic typing (13) |
-| 2 | `check_pack.py` | 43 | 77 | 100 | 0 | PyO3 | Exceptions (1) |
-| 3 | `tools/img2box/` | 213 | 68 | 73 | 0 | PyO3 | String offsets and slicing (1); Dynamic typing (8); Division and modulo (7) |
-| 4 | `tools/icon_export/legacy/` | 289 | 67 | 69 | 0 | PyO3 | String offsets and slicing (4); Division and modulo (10); Dynamic typing (2) |
-| 5 | `main.py` | 77 | 64 | 90 | 0 | PyO3 | Dynamic typing (5); Class inheritance (1); Exceptions (2) |
+| 2 | `_icon_equiv.py` | 106 | 79 | 72 | 0 | PyO3 | String offsets and slicing (5); Hash iteration order (4); Division and modulo (4) |
+| 3 | `check_pack.py` | 43 | 77 | 100 | 0 | PyO3 | Exceptions (1) |
+| 4 | `tools/img2box/` | 213 | 68 | 73 | 0 | PyO3 | String offsets and slicing (1); Dynamic typing (8); Division and modulo (7) |
+| 5 | `tools/icon_export/legacy/` | 289 | 67 | 69 | 0 | PyO3 | String offsets and slicing (4); Division and modulo (10); Dynamic typing (2) |
+| 6 | `main.py` | 77 | 64 | 90 | 0 | PyO3 | Dynamic typing (5); Class inheritance (1); Exceptions (2) |
 
 ### `tools/unmult/`
 
@@ -29,6 +30,18 @@ Best first ports: safe to port (readiness) and worth porting (loops and string w
 - Dynamic typing x13: `tools/unmult/core.py:22`, `tools/unmult/core.py:26`, `tools/unmult/core.py:32`
 - Exceptions x9: `tools/unmult/core.py:96`, `tools/unmult/core.py:98`, `tools/unmult/core.py:100`
 - Number semantics x1: `tools/unmult/core.py:68`
+
+### `_icon_equiv.py`
+
+106 lines in 1 file, wave 0, priority 79, readiness 72, bridge **PyO3**.
+
+- Leaf: imports no other unit.
+- String offsets and slicing x5: `_icon_equiv.py:52`, `_icon_equiv.py:98`, `_icon_equiv.py:99`
+- Hash iteration order x4: `_icon_equiv.py:121`, `_icon_equiv.py:122`
+- Division and modulo x4: `_icon_equiv.py:39`, `_icon_equiv.py:61`
+- Dynamic typing x1: `_icon_equiv.py:15`
+- Number semantics x2: `_icon_equiv.py:121`, `_icon_equiv.py:122`
+- Exceptions x1: `_icon_equiv.py:129`
 
 ### `check_pack.py`
 
@@ -61,21 +74,11 @@ Best first ports: safe to port (readiness) and worth porting (loops and string w
 - Integer width and overflow x1: `tools/icon_export/legacy/normalize_icons.py:54`
 - Exceptions x5: `tools/icon_export/legacy/crop_to_circle.py:36`, `tools/icon_export/legacy/crop_to_rounded_square.py:42`, `tools/icon_export/legacy/crop_to_square.py:39`
 
-### `main.py`
-
-77 lines in 1 file, wave 1, priority 64, readiness 90, bridge **PyO3**.
-
-- 1 PyPI dependencies not in the crate table: check them by hand.
-- Imports `tools/icon_export/`: port it first, or port them together.
-- Dynamic typing x5: `main.py:28`, `main.py:40`, `main.py:53`
-- Class inheritance x1: `main.py:25`
-- Exceptions x2: `main.py:16`, `main.py:71`
-
 ## Order by package
 
 Packages come after the workspace packages they use. Inside a package, port by wave: a unit's imports are in earlier waves.
 
-### 1. root (`.`, portable, 1 test file)
+### 1. root (`.`, portable, 2 test files)
 
 | Wave | Unit | Status | Lines | Readiness | Bridge | Main risks |
 | ---: | --- | --- | ---: | ---: | --- | --- |
@@ -86,8 +89,9 @@ Packages come after the workspace packages they use. Inside a package, port by w
 | 0 | `tools/ai_matting/` | caution | 111 | 81 | PyO3 | String offsets and slicing (1); Division and modulo (4) |
 | 0 | `tools/img2box/` | ready | 213 | 73 | PyO3 | String offsets and slicing (1); Dynamic typing (8) |
 | 0 | `tools/unmult/` | ready | 183 | 73 | PyO3 | String offsets and slicing (12); Hash iteration order (1) |
+| 0 | `_icon_equiv.py` | ready | 106 | 72 | PyO3 | String offsets and slicing (5); Hash iteration order (4) |
 | 0 | `tools/icon_export/legacy/` | ready | 289 | 69 | PyO3 | String offsets and slicing (4); Division and modulo (10) |
-| 0 | `tools/icon_export/` | caution | 679 | 30 | PyO3 | String offsets and slicing (9); Hash iteration order (1) |
+| 0 | `tools/icon_export/` | caution | 707 | 35 | PyO3 | String offsets and slicing (9); Hash iteration order (1) |
 | 1 | `main.py` | ready | 77 | 90 | PyO3 | Dynamic typing (5); Class inheritance (1) |
 | 1 | `backend.py` | caution | 139 | 81 | PyO3 | Hash iteration order (1); Concurrency (6) |
 
@@ -98,8 +102,8 @@ Packages come after the workspace packages they use. Inside a package, port by w
 | `rembg` | 4 | ? | unknown |  |
 | `tkinterdnd2` | 2 | ? | unknown |  |
 | `bpy` | 1 | ? | unknown |  |
-| `pil` | 6 | image | partial |  |
-| `numpy` | 5 | ndarray | partial | Broadcasting and dtype rules differ; check numerics. |
+| `pil` | 7 | image | partial |  |
+| `numpy` | 6 | ndarray | partial | Broadcasting and dtype rules differ; check numerics. |
 | `scipy` | 3 | ndarray, statrs | partial |  |
 
 ## Risk guide

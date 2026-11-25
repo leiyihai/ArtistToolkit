@@ -85,6 +85,7 @@ ArtistToolkit/
 ├── start.bat               # 双击启动 Electron 新版界面
 ├── rust/                   # Rust 加速:rust-anything 生成的 crate + 录制用例
 │   ├── unmult-rs/          # 去底像素内核的 Rust 移植(PyO3),含 291 条录制与 REPORT.md
+│   ├── icon-export-rs/     # 图标连通域/外接框的 Rust 移植,含 156 条录制与 REPORT.md
 │   └── PORT_MAP.md         # 移植进度地图(已移植/待移植单位)
 ├── docs/
 │   ├── new-tab-guide.md    # ★ 新增一个 TAB 页的完整指南(照着做即可)
@@ -98,22 +99,26 @@ ArtistToolkit/
 - **引擎**:Python(`tools/<name>/core.py`)打包成独立 exe(`dist/ArtistToolkit-backend.exe`),Electron 主进程 spawn 它,stdio 逐行 JSON 通信,进程常驻(rembg 模型只加载一次)。
 - **开发运行**:`cd app && npm start`(无后端 exe 时自动退回 `python backend.py`)。
 
-### Rust 加速:去底像素内核
+### Rust 加速:去底内核 + 图标拆分
 
-用 [rust-anything](https://github.com/erkamyaman/rust-anything) 把 `tools/unmult/core.py` 里
-「像素进 → 像素出」的内核 `unmult_rgba` 移植成 Rust(`rust/unmult-rs`,PyO3),Python 接口不变,
-`process_batch` 与界面无需改动。实测内核调用约 **21 倍**于 numpy 实现(单次 50.8 µs → 2.4 µs,
-见 `rust/unmult-rs/report/REPORT.md`)。
+用 [rust-anything](https://github.com/erkamyaman/rust-anything) 把两个纯计算内核移植成 Rust(PyO3),
+Python 接口与界面都不变,`process_batch` 只在内部换成 Rust 实现:
 
-- **行为录制**:291 条用例(随机输入 + 边界/报错路径)由 Python 原实现录制在 `rust/unmult-rs/cases.jsonl`,
-  Rust 侧必须逐字节复现 —— `rust-anything diff rust/unmult-rs` 应输出 `291/291`。
-- **完成门禁**:`rust-anything gate rust/unmult-rs`(fmt、clippy、cargo test、无 panic、行为一致)。
-- **差分测试**:`python tools/unmult/tests/test_kernel_parity.py` 在同一进程里比较 Rust 与 Python 两条路径。
-- **开关**:`RUST_ANYTHING_MODE=old`(或 `RUST_ANYTHING_UNIT_UNMULT=original`)回到 Python 实现;
-  打包环境没有 `.pyd` 时也会自动回退,因此不影响 `build.bat` 产物。
-- **改 Rust 后**:`rust-anything build rust/unmult-rs` 重新编译扩展(需要 Rust 1.97+ 与 MSVC Build Tools)。
+| 内核 | 所在 crate | 录制用例 | 实测加速 |
+| --- | --- | ---: | --- |
+| `unmult_rgba`(去底:反预乘 + 3×3 去边) | `rust/unmult-rs` | 291 | **约 21×**(50.8 µs → 2.4 µs) |
+| `segment_component_boxes`(Alpha 连通域 + 外接框,替换 scipy 逐块全图扫描) | `rust/icon-export-rs` | 156 | **约 3.9×**(14.7 µs → 3.8 µs) |
 
-进度与后续单位(图标拆分、批量缩放、抠图等)见 `rust/PORT_MAP.md` 与 `docs/rust-migration-plan.md`。
+- **行为录制**:用例由 Python 原实现录制(Rust 侧必须逐字节/逐值复现),
+  `rust-anything diff <crate>` 应输出 `291/291`、`156/156`;`rust-anything gate <crate>` 是完成门禁
+  (fmt、clippy、cargo test、无 panic、行为一致)。
+- **差分测试**:`python tools/unmult/tests/test_kernel_parity.py`、
+  `python tools/icon_export/tests/test_kernel_parity.py` 在同一进程里比较 Rust 与 Python 两条路径。
+- **开关**:`RUST_ANYTHING_MODE=old`(或 `RUST_ANYTHING_UNIT_<NAME>=original`)回到 Python 实现;
+  打包环境没有 `.pyd` 时也会自动回退,不影响 `build.bat` 产物。
+- **改 Rust 后**:`rust-anything build <crate>` 重新编译(需要 Rust 1.97+ 与 MSVC Build Tools)。
+
+进度与后续单位(批量缩放、抠图、HDRI 切图等)见 `rust/PORT_MAP.md` 与 `docs/rust-migration-plan.md`。
 
 ### 新增一个 TAB 页
 

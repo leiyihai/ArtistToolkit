@@ -15,7 +15,7 @@ import time
 
 from PIL import Image, ImageDraw
 
-__all__ = ["CROP_TYPES", "process_batch"]
+__all__ = ["CROP_TYPES", "process_batch", "segment_component_boxes"]
 
 # ---------- 配置 ----------
 # 裁切类型:key -> 中文显示名(输出目录用 key,英文,文件系统安全)
@@ -112,6 +112,46 @@ def is_transparent(img):
 
 
 # ---------- 拆图标 ----------
+def segment_component_boxes(data: bytes, width: int, height: int) -> list[int]:
+    """RGBA8 字节 → 连通域外接框(已按尺寸过滤),扁平返回 [x1,y1,x2,y2,…]。
+
+    与 segment_icons 的连通域阶段等价:Alpha>10 为前景,4 邻接标记连通域,
+    丢掉小于 MIN_ICON_PIXELS 或不足最大块 2% 的碎块,结果按 (y1,x1,y2,x2) 排序。
+    排序让这个纯函数有确定输出,便于录制/移植到 Rust(rust/icon-segment-rs);
+    下游还会再排序合并,因此不影响最终图标顺序。
+    """
+    import numpy as np
+    from scipy import ndimage
+
+    if width <= 0 or height <= 0:
+        raise ValueError("尺寸必须为正整数")
+    expected = width * height * 4
+    if len(data) != expected:
+        raise ValueError(f"数据长度应为 {expected}({width}×{height}×4),实际 {len(data)}")
+
+    arr = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 4)
+    mask = arr[..., 3] > 10
+    labeled, num = ndimage.label(mask)
+    if num == 0:
+        return []
+    sizes = ndimage.sum(mask, labeled, range(1, num + 1))
+    max_size = float(sizes.max())
+
+    boxes = []
+    for i in range(1, num + 1):
+        size = sizes[i - 1]
+        if size < MIN_ICON_PIXELS or (max_size and size < 0.02 * max_size):
+            continue
+        ys, xs = np.where(labeled == i)
+        boxes.append((int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())))
+    boxes.sort(key=lambda b: (b[1], b[0], b[3], b[2]))
+
+    flat = []
+    for box in boxes:
+        flat.extend(box)
+    return flat
+
+
 def split_by_gaps(mask):
     # ponytail: 穿透判定——谷底必须接近全透明才算网格间隙;
     # 仅凭投影相对低会误切图标内部空隙(圆润表情包/镂空图标)。
@@ -148,21 +188,14 @@ def split_by_gaps(mask):
 def segment_icons(img):
     """把透明背景图拆成独立图标,返回 PIL.Image 列表(保持原始尺寸)。"""
     import numpy as np
-    from scipy import ndimage
-    alpha = np.array(img)[:, :, 3]
-    mask = alpha > 10
-    labeled, num = ndimage.label(mask)
-    sizes = ndimage.sum(mask, labeled, range(1, num + 1))
-    max_size = float(sizes.max()) if num else 0.0
+    rgba = img if img.mode == "RGBA" else img.convert("RGBA")
+    width, height = rgba.size
+    flat = segment_component_boxes(rgba.tobytes(), width, height)
+    mask = np.array(rgba)[:, :, 3] > 10
 
     boxes = []
-    for i in range(1, num + 1):
-        # 绝对阈值 + 相对主块比例:滤掉抠图残渣(如 ~1k 像素小碎块)
-        # ponytail: 按最大块 2% 过滤,图标集近似等大时安全;含极小真图标时需按内容再判
-        if sizes[i - 1] < MIN_ICON_PIXELS or (max_size and sizes[i - 1] < 0.02 * max_size):
-            continue
-        ys, xs = np.where(labeled == i)
-        x1, y1, x2, y2 = xs.min(), ys.min(), xs.max(), ys.max()
+    for k in range(0, len(flat), 4):
+        x1, y1, x2, y2 = flat[k], flat[k + 1], flat[k + 2], flat[k + 3]
         # 疑似图标集(尺寸大)→ 检测网格缝隙再切分
         if (x2 - x1) > 300 or (y2 - y1) > 300:
             sub = mask[y1:y2 + 1, x1:x2 + 1]
@@ -519,6 +552,28 @@ def selftest():
     return True, f"OK, 图标 {[i.size for i in icons]}, rembg {rembg.__version__}"
 
 
+# >>> rust-anything: icon-export-rs is on. `rust-anything disable ../../rust/icon-export-rs` removes this block.
+def _rust_anything_icon_export_rs():
+    import importlib, os, sys
+    mode = os.environ.get("RUST_ANYTHING_MODE")
+    if mode == "old" or os.environ.get("RUST_ANYTHING_UNIT_ICON_EXPORT") == "original":
+        return
+    at = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../rust/icon-export-rs/python"))
+    sys.path.insert(0, at)
+    try:
+        native = importlib.import_module("icon_export_rs")
+    except ImportError:
+        if mode == "new":
+            raise
+        return
+    finally:
+        sys.path.remove(at)
+    globals().update({name: getattr(native, name) for name in ["segment_component_boxes"]})
+
+
+_rust_anything_icon_export_rs()
+del _rust_anything_icon_export_rs
+# <<< rust-anything: icon-export-rs
 if __name__ == "__main__":
     ok, msg = selftest()
     print("core self-check:", msg)
