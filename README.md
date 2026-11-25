@@ -83,6 +83,7 @@ ArtistToolkit/
 ├── ArtistToolkit-backend.spec  # Python 后端 exe 的 PyInstaller 配置
 ├── build.bat               # 打包 Python 后端 exe + 旧版 GUI exe
 ├── start.bat               # 双击启动 Electron 新版界面
+├── ui/                     # Rust/GPUI 桌面前端(gpui-kit),逐步替换 Electron 外壳
 ├── rust/                   # Rust 加速:rust-anything 生成的 crate + 录制用例
 │   ├── unmult-rs/          # 去底像素内核的 Rust 移植(PyO3),含 291 条录制与 REPORT.md
 │   ├── icon-export-rs/     # 图标连通域/外接框的 Rust 移植,含 156 条录制与 REPORT.md

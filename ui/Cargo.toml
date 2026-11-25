@@ -1,0 +1,12 @@
+[package]
+name = "artist-toolkit-ui"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "ArtistToolkit 的 Rust/GPUI 桌面前端(gpui-kit)"
+
+[dependencies]
+gpui-kit = "0.11"
+serde_json = "1"
+smol = "2"
+rfd = "0.15"
