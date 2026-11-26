@@ -22,7 +22,7 @@ import os
 import numpy as np
 from PIL import Image
 
-__all__ = ["matting_enabled", "refine_cutout", "rtol"]
+__all__ = ["matting_enabled", "refine_cutout", "finish", "rtol"]
 
 _FALSE = {"0", "off", "false", "no", "none"}
 _TRUE = {"1", "on", "true", "yes"}
@@ -93,3 +93,35 @@ def _refine(img, mask, foreground_threshold, background_threshold, erode_size, t
     cutout = stack_images(foreground, alpha)
     cutout = np.clip(cutout * 255, 0, 255).astype(np.uint8)
     return Image.fromarray(cutout)
+
+
+def finish(rgba, harden_px=3, bleed_px=3):
+    """收尾两步,都是纯像素操作、几十毫秒:
+
+    1. 内部填实:离透明区超过 harden_px 的前景像素一律 alpha=255。
+       模型掩膜在图标内部偏白/偏亮处常给出 230~250,不填实就会"漏出"底色,
+       看起来像是这些白块被抠掉了。
+    2. 颜色外扩:把前景颜色向外扩散到半透明/透明区,替换那里残留的背景色。
+       否则结果缩放(界面缩略图、导出小尺寸)时会把背景白拉进边缘,形成白毛边。
+
+    只改 RGB 中 alpha 很低的部分,可见像素保持原样。
+    """
+    from scipy.ndimage import binary_erosion, distance_transform_edt
+
+    arr = np.asarray(rgba).astype(np.uint8).copy()
+    alpha = arr[..., 3]
+
+    if harden_px > 0 and (alpha > 8).any():
+        # 3×3 腐蚀 N 次 ≈ 离透明区 N 像素,比精确距离变换快 4 倍多
+        core = binary_erosion(alpha > 8, structure=np.ones((3, 3), bool), iterations=harden_px)
+        arr[..., 3] = np.where(core, 255, alpha)
+
+    solid = alpha > 200
+    if bleed_px > 0 and solid.any() and not solid.all():
+        # 每个非不透明像素取最近的不透明像素颜色(只改 bleed_px 以内的那圈)
+        distance, (iy, ix) = distance_transform_edt(~solid, return_indices=True)
+        nearest = arr[..., :3][iy, ix]
+        take = (~solid & (distance <= bleed_px))[..., None]
+        arr[..., :3] = np.where(take, nearest, arr[..., :3])
+
+    return Image.fromarray(arr)

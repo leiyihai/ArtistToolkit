@@ -28,7 +28,7 @@ MODELS = {
     "birefnet-general": "人像精细(BiRefNet)",
 }
 DEFAULT_MODEL = "isnet-general-use"
-# 超过该像素数关闭 alpha_matting(pymatting 内存开销随像素数增长)
+# 超过该像素数关闭 alpha 精修(pymatting 在纯色图集上可能跑很久:实测 2048² 图集 6~20 s)
 MAX_MATTING_PIXELS = 3_000_000
 # 与原 run.py 一致的边缘参数
 ALPHA_MATTING_FOREGROUND = 230
@@ -111,11 +111,13 @@ def matting(img, model=DEFAULT_MODEL, log=None):
     if log:
         log("  抠图中…")
     sess = _sessions[model]
-    # 与原 run.py 相同的边缘参数:小图(≤3M 像素)启用 alpha 精修
+    # 与原 run.py 相同的边缘参数:小图启用 alpha 精修
+    # 6M 像素以内都精修(2048²=4.19M 也要):实测 3M 门槛会让整张图集退化成"只取掩膜",
+    # 图标内部偏白的部分会半透明、边缘也会发虚。精修在 4.19M 上约 3~5.5 s/张。
     use_matting = matting_refine.matting_enabled(img.size[0] * img.size[1], MAX_MATTING_PIXELS)
     if use_matting:
         # 精修走本地实现:与 rembg 同一算法,但 CG 收敛阈值可调(默认 1e-5,实测约 1.7×)
-        return matting_refine.refine_cutout(
+        out = matting_refine.refine_cutout(
             img,
             sess,
             foreground_threshold=ALPHA_MATTING_FOREGROUND,
@@ -123,7 +125,10 @@ def matting(img, model=DEFAULT_MODEL, log=None):
             erode_size=ALPHA_MATTING_ERODE,
             log=log,
         )
-    return _remove_fn(img, session=sess, alpha_matting=False)
+    else:
+        out = _remove_fn(img, session=sess, alpha_matting=False)
+    # 内部填实 + 颜色外扩:防"白块被抠掉"和缩小后的白毛边
+    return matting_refine.finish(out)
 
 
 def is_transparent(img):
