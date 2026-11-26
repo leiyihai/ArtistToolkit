@@ -5,11 +5,13 @@
 
 use std::path::PathBuf;
 
+use gpui_kit::*;
+use gpui_kit::component::slider::{Slider, SliderState};
 use gpui_kit::component::*;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::*;
 use serde_json::json;
 
+use crate::thumbs::ThumbCache;
 use crate::{Shell, theme, widgets};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -44,22 +46,22 @@ impl Crop {
 }
 
 pub const SIZES: [u32; 4] = [32, 64, 128, 256];
-/// 圆角半径预设(px,以 128px 输出为基准);Electron 版是 1–64 的滑杆。
-pub const CORNERS: [u32; 4] = [12, 18, 24, 32];
 
 pub struct IconExportState {
     pub paths: Vec<PathBuf>,
     pub out_dir: String,
     pub crop: Crop,
     pub sizes: [bool; 4],
-    pub corner_px: u32,
+    /// 圆角半径(1–64 px,以 128px 输出为基准),与原版滑杆一致。
+    pub corner: Entity<SliderState>,
     pub normalize: bool,
     pub running: bool,
     pub logs: Vec<String>,
+    pub thumbs: ThumbCache,
 }
 
-impl Default for IconExportState {
-    fn default() -> Self {
+impl IconExportState {
+    pub fn new(_window: &mut Window, cx: &mut Context<Shell>) -> Self {
         let home = std::env::var("USERPROFILE").unwrap_or_default();
         let desktop = PathBuf::from(&home).join("Desktop");
         let out_dir = if desktop.is_dir() {
@@ -82,16 +84,29 @@ impl Default for IconExportState {
         } else {
             Vec::new()
         };
+        let corner = cx.new(|_| {
+            SliderState::new()
+                .min(1.0)
+                .max(64.0)
+                .step(1.0)
+                .default_value(18.0)
+        });
         Self {
+            thumbs: ThumbCache::new(&paths),
             paths,
             out_dir,
             crop: Crop::Original,
             sizes,
-            corner_px: 18,
+            corner,
             normalize: false,
             running: false,
             logs: Vec::new(),
         }
+    }
+
+    /// 当前圆角半径(px),供界面显示与 `corner_ratio` 计算。
+    pub fn corner_px(&self, cx: &App) -> u32 {
+        self.corner.read(cx).value().start().round() as u32
     }
 }
 
@@ -132,6 +147,8 @@ impl Shell {
             .collect();
         let rounded = self.icon.crop == Crop::RoundedSquare;
         let total: usize = self.icon.paths.len();
+        let corner_px = self.icon.corner.read(cx).value().start().round() as u32;
+        let thumbs = widgets::thumb_grid(&self.icon.thumbs, &self.icon.paths).into_any_element();
 
         // 分段选择:裁切类型
         let mut crop_seg = widgets::seg_container();
@@ -143,21 +160,6 @@ impl Shell {
                 !running,
                 cx.listener(move |this, _, _, cx| {
                     this.icon.crop = crop;
-                    cx.notify();
-                }),
-            ));
-        }
-
-        // 圆角半径:Electron 是滑杆,这里用同宽的 chip 组承担同一参数
-        let mut corner_row = h_flex().gap(px(8.)).items_center();
-        for (index, px_value) in CORNERS.into_iter().enumerate() {
-            corner_row = corner_row.child(widgets::chip(
-                ("corner", index),
-                format!("{px_value}px"),
-                self.icon.corner_px == px_value,
-                !running && rounded,
-                cx.listener(move |this, _, _, cx| {
-                    this.icon.corner_px = px_value;
                     cx.notify();
                 }),
             ));
@@ -224,7 +226,8 @@ impl Shell {
                                     .text_color(theme::muted())
                                     .child(picked),
                             ),
-                    ),
+                    )
+                    .child(div().mt(px(12.)).when(total > 0, |this| this.child(thumbs))),
             )
             .child(
                 widgets::card()
@@ -233,13 +236,26 @@ impl Shell {
                     .child(
                         widgets::field("圆角半径")
                             .mt(px(12.))
-                            .child(corner_row)
                             .child(
                                 div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .when(!rounded, |this| this.opacity(0.45))
+                                    .child(
+                                        Slider::new(&self.icon.corner)
+                                            .horizontal()
+                                            .disabled(!rounded),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .w(px(44.))
+                                    .flex_none()
+                                    .text_right()
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(if rounded { theme::text() } else { theme::muted() })
-                                    .child(format!("{}px", self.icon.corner_px)),
+                                    .child(format!("{corner_px}px")),
                             ),
                     )
                     .child(widgets::field("输出尺寸").mt(px(12.)).child(size_row))
@@ -362,7 +378,8 @@ impl Shell {
             "normalize": self.icon.normalize,
         });
         if self.icon.crop == Crop::RoundedSquare {
-            payload["corner_ratio"] = json!(self.icon.corner_px as f64 / 128.0);
+            let corner = self.icon.corner.read(cx).value().start();
+            payload["corner_ratio"] = json!(corner / 128.0);
         }
         let count = paths.len();
         self.send_job(crate::JobKind::IconExport, "icon_process", payload);

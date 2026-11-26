@@ -6,7 +6,10 @@ use gpui_kit::component::*;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
+use std::path::PathBuf;
+
 use crate::theme;
+use crate::thumbs::ThumbCache;
 
 /// 白底卡片(`.card`):1px 边框、10px 圆角、16px 内边距。
 pub fn card() -> Div {
@@ -244,6 +247,56 @@ pub fn log_panel(lines: Vec<String>) -> Div {
         body = body.child(div().text_size(px(12.)).child(line));
     }
     body
+}
+
+/// 缩略图网格(`.thumbs`):92px 宽的卡片,图片 64px 高,下面 11px 文件名。
+pub fn thumb_grid(cache: &ThumbCache, paths: &[PathBuf]) -> impl IntoElement {
+    let mut grid = h_flex().w_full().flex_wrap().gap(px(10.));
+    for path in paths {
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let preview: AnyElement = match cache.get(path) {
+            Some(image) => img(ImageSource::Render(image))
+                .h(px(64.))
+                .object_fit(ObjectFit::Contain)
+                .into_any_element(),
+            None => div()
+                .text_size(px(10.))
+                .text_color(theme::muted())
+                .child("无法预览")
+                .into_any_element(),
+        };
+        grid = grid.child(
+            v_flex()
+                .w(px(92.))
+                .p(px(6.))
+                .gap(px(5.))
+                .rounded(px(theme::RADIUS))
+                .border_1()
+                .border_color(theme::border())
+                .bg(theme::panel_log())
+                .child(
+                    div()
+                        .h(px(64.))
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .overflow_hidden()
+                        .child(preview),
+                )
+                .child(
+                    div()
+                        .text_size(px(11.))
+                        .text_color(theme::muted())
+                        .overflow_hidden()
+                        .child(name),
+                ),
+        );
+    }
+    grid
 }
 
 /// 运行条(`.runbar`):主按钮靠右。

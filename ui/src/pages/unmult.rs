@@ -6,9 +6,13 @@
 use std::path::PathBuf;
 
 use gpui_kit::component::*;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use serde_json::json;
 
+use gpui_kit::component::slider::{Slider, SliderState};
+
+use crate::thumbs::ThumbCache;
 use crate::{Shell, theme, widgets};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -40,16 +44,18 @@ pub struct UnmultState {
     pub paths: Vec<PathBuf>,
     pub out_dir: String,
     pub mode: Mode,
-    pub defringe: f32,
+    /// 边缘清理强度 0–1(与原版 Defringe 滑杆一致)。
+    pub defringe: Entity<SliderState>,
     pub rebuild_alpha: bool,
     pub no_overwrite: bool,
     pub running: bool,
     pub progress: (u64, u64),
     pub logs: Vec<String>,
+    pub thumbs: ThumbCache,
 }
 
-impl Default for UnmultState {
-    fn default() -> Self {
+impl UnmultState {
+    pub fn new(_window: &mut Window, cx: &mut Context<crate::Shell>) -> Self {
         let home = std::env::var("USERPROFILE").unwrap_or_default();
         let desktop = PathBuf::from(&home).join("Desktop");
         let out_dir = if desktop.is_dir() {
@@ -71,11 +77,19 @@ impl Default for UnmultState {
         } else {
             Vec::new()
         };
+        let defringe = cx.new(|_| {
+            SliderState::new()
+                .min(0.0)
+                .max(1.0)
+                .step(0.05)
+                .default_value(0.0)
+        });
         Self {
+            thumbs: ThumbCache::new(&paths),
             paths,
             out_dir,
             mode: Mode::Auto,
-            defringe: 0.0,
+            defringe,
             rebuild_alpha: false,
             no_overwrite: false,
             running: false,
@@ -103,6 +117,8 @@ impl Shell {
         } else {
             format!("已选 {} 张", self.unmult.paths.len())
         };
+        let total = self.unmult.paths.len();
+        let thumbs = widgets::thumb_grid(&self.unmult.thumbs, &self.unmult.paths).into_any_element();
         let logs: Vec<String> = self
             .unmult
             .logs
@@ -112,7 +128,12 @@ impl Shell {
             .rev()
             .cloned()
             .collect();
-        let defringe = self.unmult.defringe;
+        let defringe_value = self.unmult.defringe.read(cx).value().start();
+        let defringe_label = if defringe_value < 0.005 {
+            "0(关闭)".to_string()
+        } else {
+            format!("{defringe_value:.2}")
+        };
         let mode = self.unmult.mode;
         let rebuild = self.unmult.rebuild_alpha;
         let no_overwrite = self.unmult.no_overwrite;
@@ -131,34 +152,6 @@ impl Shell {
                 }),
             ));
         }
-
-        let mut defringe_row = h_flex().gap(px(8.)).items_center();
-        for (index, strength) in [0.0_f32, 0.5, 1.0].into_iter().enumerate() {
-            defringe_row = defringe_row.child(widgets::chip(
-                ("unmult-defringe", index),
-                if strength == 0.0 {
-                    "关闭".to_string()
-                } else {
-                    format!("{strength:.1}")
-                },
-                (defringe - strength).abs() < f32::EPSILON,
-                !running,
-                cx.listener(move |this, _, _, cx| {
-                    this.unmult.defringe = strength;
-                    cx.notify();
-                }),
-            ));
-        }
-        defringe_row = defringe_row.child(
-            div()
-                .text_size(px(12.))
-                .text_color(theme::muted())
-                .child(if defringe == 0.0 {
-                    "0(关闭)".to_string()
-                } else {
-                    format!("{defringe:.1}")
-                }),
-        );
 
         v_flex()
             .size_full()
@@ -200,13 +193,32 @@ impl Shell {
                                     .text_color(theme::muted())
                                     .child(picked),
                             ),
-                    ),
+                    )
+                    .child(div().mt(px(12.)).when(total > 0, |this| this.child(thumbs))),
             )
             .child(
                 widgets::card()
                     .child(widgets::card_title("2 · 处理选项"))
                     .child(widgets::field("背景模式").child(mode_seg))
-                    .child(widgets::field("边缘清理").mt(px(12.)).child(defringe_row))
+                    .child(
+                        widgets::field("边缘清理")
+                            .mt(px(12.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .child(Slider::new(&self.unmult.defringe).horizontal().disabled(running)),
+                            )
+                            .child(
+                                div()
+                                    .w(px(64.))
+                                    .flex_none()
+                                    .text_right()
+                                    .text_size(px(12.))
+                                    .text_color(theme::muted())
+                                    .child(defringe_label),
+                            ),
+                    )
                     .child(
                         h_flex()
                             .mt(px(12.))
@@ -285,6 +297,7 @@ impl Shell {
             if let Ok(Some(files)) = rx.recv().await {
                 let _ = this.update(cx, |shell, cx| {
                     shell.unmult.paths = files;
+                    shell.unmult.thumbs.ensure(&shell.unmult.paths);
                     let count = shell.unmult.paths.len();
                     shell.unmult.push_log(format!("已选择 {count} 张图片"));
                     cx.notify();
@@ -325,7 +338,7 @@ impl Shell {
             "paths": paths,
             "out": self.unmult.out_dir,
             "mode": self.unmult.mode.key(),
-            "defringe": self.unmult.defringe,
+            "defringe": self.unmult.defringe.read(cx).value().start(),
             "rebuild_alpha": self.unmult.rebuild_alpha,
             "no_overwrite": self.unmult.no_overwrite,
         });

@@ -9,9 +9,11 @@
 mod backend;
 mod pages;
 mod theme;
+mod thumbs;
 mod widgets;
 
 use gpui_kit::assets::Assets;
+use gpui_kit::component::slider::SliderEvent;
 use gpui_kit::component::*;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -93,6 +95,7 @@ pub struct Shell {
     pub resize: ImageResizeState,
     pub img2box: Img2BoxState,
     query: Option<(Query, u64)>,
+    _slider_subs: Vec<Subscription>,
     job: Option<(JobKind, u64)>,
     ping_id: Option<u64>,
     /// 后端最近一次状态提示(侧边栏底部)。
@@ -120,17 +123,27 @@ impl Shell {
                 Tab::AiMatting
             },
             backend,
-            unmult: UnmultState::default(),
-            icon: IconExportState::default(),
+            unmult: UnmultState::new(window, cx),
+            icon: IconExportState::new(window, cx),
             matting: AiMattingState::default(),
             resize: ImageResizeState::new(window, cx),
             img2box: Img2BoxState::default(),
             query: None,
+            _slider_subs: Vec::new(),
             job: None,
             ping_id: None,
             status: "后端连接中…".to_string(),
         };
         shell.ping_id = Some(shell.backend.request("ping", serde_json::json!({})));
+        // 滑杆自身不驱动重绘:订阅变更后通知界面刷新。
+        shell._slider_subs = vec![
+            cx.subscribe_in(&shell.icon.corner, window, |_, _, _: &SliderEvent, _, cx| {
+                cx.notify()
+            }),
+            cx.subscribe_in(&shell.unmult.defringe, window, |_, _, _: &SliderEvent, _, cx| {
+                cx.notify()
+            }),
+        ];
         // 开发期自动化:ATK_UI_DROP="a.png;b.png" 走与拖放完全相同的处理函数(仅 debug 构建生效)。
         if cfg!(debug_assertions)
             && let Ok(list) = std::env::var("ATK_UI_DROP")
@@ -211,14 +224,17 @@ impl Shell {
             },
             Tab::Unmult => {
                 let text = append_drop_images(&mut self.unmult.paths, images, "PNG / JPG / TIFF / WebP");
+                self.unmult.thumbs.ensure(&self.unmult.paths);
                 self.unmult.push_log(text);
             }
             Tab::IconExport => {
                 let text = append_drop_images(&mut self.icon.paths, images, "PNG / JPG / WebP");
+                self.icon.thumbs.ensure(&self.icon.paths);
                 self.icon.push_log(text);
             }
             Tab::AiMatting => {
                 let text = append_drop_images(&mut self.matting.paths, images, "PNG / JPG / WebP");
+                self.matting.thumbs.ensure(&self.matting.paths);
                 self.matting.push_log(text);
             }
         }

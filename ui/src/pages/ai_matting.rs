@@ -5,9 +5,11 @@
 use std::path::PathBuf;
 
 use gpui_kit::component::*;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use serde_json::json;
 
+use crate::thumbs::ThumbCache;
 use crate::{Shell, theme, widgets};
 
 pub struct AiMattingState {
@@ -16,6 +18,7 @@ pub struct AiMattingState {
     pub running: bool,
     pub progress: (u64, u64),
     pub logs: Vec<String>,
+    pub thumbs: ThumbCache,
 }
 
 impl Default for AiMattingState {
@@ -40,7 +43,9 @@ impl Default for AiMattingState {
         } else {
             Vec::new()
         };
+        let thumbs = ThumbCache::new(&paths);
         Self {
+            thumbs,
             paths,
             out_dir,
             running: false,
@@ -68,6 +73,8 @@ impl Shell {
         } else {
             format!("已选 {} 张", self.matting.paths.len())
         };
+        let total = self.matting.paths.len();
+        let thumbs = widgets::thumb_grid(&self.matting.thumbs, &self.matting.paths).into_any_element();
         let logs: Vec<String> = self
             .matting
             .logs
@@ -119,7 +126,8 @@ impl Shell {
                                     .text_color(theme::muted())
                                     .child(picked),
                             ),
-                    ),
+                    )
+                    .child(div().mt(px(12.)).when(total > 0, |this| this.child(thumbs))),
             )
             .child(
                 widgets::card()
@@ -173,6 +181,7 @@ impl Shell {
             if let Ok(Some(files)) = rx.recv().await {
                 let _ = this.update(cx, |shell, cx| {
                     shell.matting.paths = files;
+                    shell.matting.thumbs.ensure(&shell.matting.paths);
                     let count = shell.matting.paths.len();
                     shell.matting.push_log(format!("已选择 {count} 张图片"));
                     cx.notify();
