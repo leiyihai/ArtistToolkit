@@ -1,6 +1,7 @@
 # ArtistToolkit · Rust/GPUI 前端
 
 ![图集拆分页](docs/screenshot-icon.png)
+![AI 图集命名](docs/screenshot-icon-ai.png)
 ![智能抠图页](docs/screenshot-matting.png)
 ![快捷尺寸页](docs/screenshot-resize.png)
 ![天空盒烘焙页](docs/screenshot-img2box.png)

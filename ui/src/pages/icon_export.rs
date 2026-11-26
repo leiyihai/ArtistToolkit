@@ -45,6 +45,27 @@ impl Crop {
     }
 }
 
+/// 顶部模式:旧版图集拆分 / AI 图集命名(与 Electron 版 `#mode-tabs` 一致)。
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum IconMode {
+    #[default]
+    Legacy,
+    Ai,
+}
+
+/// 「AI 图集命名」模式的状态(`aiState`)。
+pub struct AiNamingState {
+    pub clean_dir: String,
+    pub named_dir: String,
+    pub out_dir: String,
+    pub crop: Crop,
+    pub sizes: [bool; 4],
+    pub corner: Entity<SliderState>,
+    pub normalize: bool,
+    pub running: bool,
+    pub logs: Vec<String>,
+}
+
 pub const SIZES: [u32; 4] = [32, 64, 128, 256];
 
 pub struct IconExportState {
@@ -58,6 +79,8 @@ pub struct IconExportState {
     pub running: bool,
     pub logs: Vec<String>,
     pub thumbs: ThumbCache,
+    pub mode: IconMode,
+    pub ai: AiNamingState,
 }
 
 impl IconExportState {
@@ -91,7 +114,35 @@ impl IconExportState {
                 .step(1.0)
                 .default_value(18.0)
         });
+        let mut ai_sizes = [false; 4];
+        ai_sizes[2] = true;
+        let ai = AiNamingState {
+            clean_dir: String::new(),
+            named_dir: String::new(),
+            out_dir: out_dir.clone(),
+            crop: Crop::Original,
+            sizes: ai_sizes,
+            corner: cx.new(|_| {
+                SliderState::new()
+                    .min(1.0)
+                    .max(64.0)
+                    .step(1.0)
+                    .default_value(18.0)
+            }),
+            normalize: false,
+            running: false,
+            logs: Vec::new(),
+        };
+        let mode = if cfg!(debug_assertions)
+            && std::env::var("ATK_UI_ICON_MODE").ok().as_deref() == Some("ai")
+        {
+            IconMode::Ai
+        } else {
+            IconMode::Legacy
+        };
         Self {
+            mode,
+            ai,
             thumbs: ThumbCache::new(&paths),
             paths,
             out_dir,
@@ -340,6 +391,294 @@ impl Shell {
             .when(total == 0, |this| this)
     }
 
+
+    /// 图标页入口:顶部分段(旧版 / AI)与对应面板。
+    pub(crate) fn icon_page(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mode = self.icon.mode;
+        let mut mode_seg = widgets::seg_container();
+        for (index, item) in [IconMode::Legacy, IconMode::Ai].into_iter().enumerate() {
+            let label = match item {
+                IconMode::Legacy => "旧版图集拆分",
+                IconMode::Ai => "AI 图集命名",
+            };
+            mode_seg = mode_seg.child(widgets::seg_item(
+                ("icon-mode", index),
+                label,
+                mode == item,
+                true,
+                cx.listener(move |this, _, _, cx| {
+                    this.icon.mode = item;
+                    cx.notify();
+                }),
+            ));
+        }
+        let body = match mode {
+            IconMode::Legacy => self.icon_view(cx).into_any_element(),
+            IconMode::Ai => self.icon_ai_view(cx).into_any_element(),
+        };
+        v_flex().size_full().min_h_0().gap(px(16.)).child(mode_seg).child(body)
+    }
+
+    /// 「AI 图集命名」面板:三个文件夹 + 输出选项 + 日志。
+    pub(crate) fn icon_ai_view(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let running = self.icon.ai.running;
+        let logs: Vec<String> = self
+            .icon
+            .ai
+            .logs
+            .iter()
+            .rev()
+            .take(16)
+            .rev()
+            .cloned()
+            .collect();
+        let clean = self.icon.ai.clean_dir.clone();
+        let named = self.icon.ai.named_dir.clone();
+        let out = self.icon.ai.out_dir.clone();
+        let rounded = self.icon.ai.crop == Crop::RoundedSquare;
+        let corner_px = self.icon.ai.corner.read(cx).value().start().round() as u32;
+
+        let mut crop_seg = widgets::seg_container();
+        for (index, crop) in Crop::ALL.into_iter().enumerate() {
+            crop_seg = crop_seg.child(widgets::seg_item(
+                ("ai-crop", index),
+                crop.label(),
+                self.icon.ai.crop == crop,
+                !running,
+                cx.listener(move |this, _, _, cx| {
+                    this.icon.ai.crop = crop;
+                    cx.notify();
+                }),
+            ));
+        }
+
+        let mut size_row = h_flex().gap(px(8.)).items_center();
+        for (index, size) in SIZES.iter().enumerate() {
+            let size = *size;
+            size_row = size_row.child(widgets::chip(
+                ("ai-size", index),
+                format!("{size}×{size}"),
+                self.icon.ai.sizes[index],
+                !running,
+                cx.listener(move |this, _, _, cx| {
+                    if let Some(pos) = SIZES.iter().position(|value| *value == size) {
+                        this.icon.ai.sizes[pos] = !this.icon.ai.sizes[pos];
+                        cx.notify();
+                    }
+                }),
+            ));
+        }
+
+        let normalize = self.icon.ai.normalize;
+
+        v_flex()
+            .size_full()
+            .min_h_0()
+            .gap(px(16.))
+            .child(
+                widgets::card()
+                    .p(px(22.))
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("AI 图集命名"),
+                    )
+                    .child(
+                        div()
+                            .mt(px(6.))
+                            .text_size(px(13.))
+                            .text_color(theme::muted())
+                            .child("无文字版负责拆图,带名称版只用于识别。两个文件夹中的图集按相同文件名配对。"),
+                    )
+                    .child(
+                        v_flex()
+                            .mt(px(18.))
+                            .gap(px(12.))
+                            .child(self.ai_path_row("无文字图集", clean, "ai-pick-clean", 0, cx))
+                            .child(self.ai_path_row("带名称图集", named, "ai-pick-named", 1, cx))
+                            .child(self.ai_path_row("输出文件夹", out, "ai-pick-out", 2, cx)),
+                    )
+                    .child(
+                        v_flex()
+                            .mt(px(18.))
+                            .pt(px(18.))
+                            .gap(px(12.))
+                            .border_t_1()
+                            .border_color(theme::border())
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(theme::muted())
+                                    .child("输出选项"),
+                            )
+                            .child(widgets::field("裁切类型").pl(px(116.)).child(crop_seg))
+                            .child(
+                                widgets::field("圆角半径")
+                                    .pl(px(116.))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w_0()
+                                            .when(!rounded, |this| this.opacity(0.45))
+                                            .child(
+                                                Slider::new(&self.icon.ai.corner)
+                                                    .horizontal()
+                                                    .disabled(!rounded),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(44.))
+                                            .flex_none()
+                                            .text_right()
+                                            .text_size(px(13.))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(if rounded { theme::text() } else { theme::muted() })
+                                            .child(format!("{corner_px}px")),
+                                    ),
+                            )
+                            .child(widgets::field("输出尺寸").pl(px(116.)).child(size_row))
+                            .child(
+                                h_flex()
+                                    .pl(px(190.))
+                                    .child(widgets::chip(
+                                        "ai-normalize",
+                                        "统一图标视觉大小",
+                                        normalize,
+                                        !running,
+                                        cx.listener(|this, _, _, cx| {
+                                            this.icon.ai.normalize = !this.icon.ai.normalize;
+                                            cx.notify();
+                                        }),
+                                    )),
+                            ),
+                    ),
+            )
+            .child(widgets::runbar().child(widgets::button(
+                "ai-run",
+                if running { "处理中…" } else { "开始 AI 命名" },
+                true,
+                cx.listener(|this, _, _, cx| this.run_icon_ai(cx)),
+            )))
+            .child(
+                widgets::card()
+                    .child(widgets::card_title("运行日志"))
+                    .child(widgets::log_panel(logs)),
+            )
+    }
+
+    /// AI 面板里的一行:190px 标签 + 路径框 + 选择文件夹。
+    fn ai_path_row(
+        &self,
+        label: &'static str,
+        value: String,
+        id: &'static str,
+        target: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let empty = value.is_empty();
+        h_flex()
+            .items_center()
+            .gap(px(12.))
+            .child(
+                div()
+                    .w(px(190.))
+                    .flex_none()
+                    .text_size(px(13.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(label),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .px(px(10.))
+                    .py(px(8.))
+                    .rounded(px(theme::RADIUS))
+                    .border_1()
+                    .border_color(theme::border())
+                    .bg(theme::panel())
+                    .text_size(px(13.))
+                    .text_color(if empty { theme::muted() } else { theme::muted() })
+                    .overflow_hidden()
+                    .child(if empty {
+                        format!("选择{label}文件夹")
+                    } else {
+                        value
+                    }),
+            )
+            .child(widgets::button(
+                id,
+                "选择文件夹",
+                false,
+                cx.listener(move |this, _, _, cx| this.ai_pick_dir(target, cx)),
+            ))
+    }
+
+    pub(crate) fn ai_pick_dir(&mut self, target: usize, cx: &mut Context<Self>) {
+        let (tx, rx) = smol::channel::unbounded();
+        std::thread::spawn(move || {
+            let dir = rfd::FileDialog::new().pick_folder();
+            let _ = tx.send_blocking(dir);
+        });
+        cx.spawn(async move |this, cx| {
+            if let Ok(Some(dir)) = rx.recv().await {
+                let value = dir.display().to_string();
+                let _ = this.update(cx, |shell, cx| {
+                    match target {
+                        0 => shell.icon.ai.clean_dir = value,
+                        1 => shell.icon.ai.named_dir = value,
+                        _ => shell.icon.ai.out_dir = value,
+                    }
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    pub(crate) fn run_icon_ai(&mut self, cx: &mut Context<Self>) {
+        if self.icon.ai.running {
+            return;
+        }
+        let clean = self.icon.ai.clean_dir.clone();
+        let named = self.icon.ai.named_dir.clone();
+        let out = self.icon.ai.out_dir.clone();
+        if clean.is_empty() || named.is_empty() || out.is_empty() {
+            self.icon.ai.logs.push("请填写三个文件夹路径。".to_string());
+            cx.notify();
+            return;
+        }
+        let sizes: Vec<u32> = SIZES
+            .iter()
+            .zip(self.icon.ai.sizes)
+            .filter(|(_, on)| *on)
+            .map(|(size, _)| *size)
+            .collect();
+        if sizes.is_empty() {
+            self.icon.ai.logs.push("请至少选择一个输出尺寸。".to_string());
+            cx.notify();
+            return;
+        }
+        let mut payload = json!({
+            "clean_dir": clean,
+            "named_dir": named,
+            "out": out,
+            "crop": self.icon.ai.crop.key(),
+            "sizes": sizes,
+            "normalize": self.icon.ai.normalize,
+        });
+        if self.icon.ai.crop == Crop::RoundedSquare {
+            let corner = self.icon.ai.corner.read(cx).value().start();
+            payload["corner_ratio"] = json!(corner / 128.0);
+        }
+        self.send_job(crate::JobKind::IconAi, "icon_ai_process", payload);
+        self.icon.ai.running = true;
+        self.icon.ai.logs.push("开始 AI 图集命名…".to_string());
+        cx.notify();
+    }
     pub(crate) fn icon_pick_images(&mut self, cx: &mut Context<Self>) {
         let (tx, rx) = smol::channel::unbounded();
         std::thread::spawn(move || {

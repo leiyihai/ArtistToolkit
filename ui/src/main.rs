@@ -81,6 +81,7 @@ pub enum Query {
 pub enum JobKind {
     Unmult,
     IconExport,
+    IconAi,
     Matting,
     Resize,
     Img2Box,
@@ -249,6 +250,7 @@ impl Shell {
         match kind {
             JobKind::Unmult => self.unmult.push_log(text),
             JobKind::IconExport => self.icon.push_log(text),
+            JobKind::IconAi => self.icon.ai.logs.push(text.into()),
             JobKind::Matting => self.matting.push_log(text),
             JobKind::Resize => self.resize.push_log(text),
             JobKind::Img2Box => self.img2box.push_log(text),
@@ -289,7 +291,7 @@ impl Shell {
                                 self.img2box.stage = stage.to_string();
                             }
                         }
-                        JobKind::IconExport => {}
+                        JobKind::IconAi | JobKind::IconExport => {}
                     }
                 }
             }
@@ -363,6 +365,7 @@ impl Shell {
         match kind {
             JobKind::Unmult => self.unmult.running = running,
             JobKind::IconExport => self.icon.running = running,
+            JobKind::IconAi => self.icon.ai.running = running,
             JobKind::Matting => self.matting.running = running,
             JobKind::Resize => self.resize.running = running,
             JobKind::Img2Box => self.img2box.running = running,
@@ -488,7 +491,7 @@ impl Render for Shell {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = match self.tab {
             Tab::Unmult => self.unmult_view(cx).into_any_element(),
-            Tab::IconExport => self.icon_view(cx).into_any_element(),
+            Tab::IconExport => self.icon_page(cx).into_any_element(),
             Tab::AiMatting => self.matting_view(cx).into_any_element(),
             Tab::ImageResize => self.resize_view(cx).into_any_element(),
             Tab::Img2Box => self.img2box_view(cx).into_any_element(),
