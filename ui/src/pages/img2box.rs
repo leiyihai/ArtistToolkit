@@ -3,11 +3,11 @@
 //! 对应 Electron 版 `tools/img2box/frontend/view.js`;后端命令 `img2box_process`、
 //! `img2box_find_blender`、`img2box_preview`。
 
-use gpui_kit::component::{button::Button, button::ButtonVariants, progress::Progress, *};
+use gpui_kit::component::*;
 use gpui_kit::*;
 use serde_json::json;
 
-use crate::Shell;
+use crate::{Shell, theme, widgets::{self, path_box}};
 
 pub struct Img2BoxState {
     pub hdri: String,
@@ -66,7 +66,6 @@ impl Img2BoxState {
 
 impl Shell {
     pub(crate) fn img2box_view(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
         let running = self.img2box.running;
         let logs: Vec<String> = self
             .img2box
@@ -87,171 +86,163 @@ impl Shell {
         } else {
             self.img2box.blender.clone()
         };
-        let stage = self.img2box.stage.clone();
-        let preview_url = self.img2box.preview_url.clone();
+        let skybox = if self.img2box.skybox_dir.is_empty() {
+            "6 张面图(right/left/top/bottom/front/back.png)所在文件夹".to_string()
+        } else {
+            self.img2box.skybox_dir.clone()
+        };
+        let out_dir = self.img2box.out_dir.clone();
 
         v_flex()
             .size_full()
             .min_h_0()
-            .gap_3()
-            .p_4()
-            .id("img2box-page")
-            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
-                this.accept_drop(crate::Tab::Img2Box, paths.0.to_vec(), cx)
-            }))
-            .child(self.drop_banner(
-                &theme,
-                "拖拽 HDRI 图片到这里(单张),或点「选择图片…」",
-            ))
+            .gap(px(16.))
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(div().text_sm().child("HDRI:"))
+                widgets::card()
+                    .child(widgets::card_title("1 · 输入 HDRI"))
                     .child(
-                        Button::new("hdri-pick")
-                            .label("选择图片…")
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.img2box_pick_hdri(cx))),
+                        widgets::dropzone(
+                            "img2box-drop",
+                            "将 HDRI 图片拖到此处,或点击选择(单张 PNG)",
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| this.img2box_pick_hdri(cx))),
                     )
                     .child(
-                        div()
-                            .max_w(px(380.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(hdri),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("hdri-out")
-                            .label("输出目录…")
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.img2box_pick_out(cx))),
-                    )
-                    .child(
-                        div()
-                            .max_w(px(340.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(self.img2box.out_dir.clone()),
+                        h_flex()
+                            .mt(px(12.))
+                            .gap(px(10.))
+                            .items_center()
+                            .child(widgets::button(
+                                "img2box-pick",
+                                "选择图片…",
+                                false,
+                                cx.listener(|this, _, _, cx| this.img2box_pick_hdri(cx)),
+                            ))
+                            .child(widgets::button(
+                                "img2box-clear",
+                                "清空",
+                                false,
+                                cx.listener(|this, _, _, cx| {
+                                    this.img2box.hdri.clear();
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(theme::muted())
+                                    .overflow_hidden()
+                                    .child(hdri),
+                            ),
                     ),
             )
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(div().text_sm().child("Blender:"))
+                widgets::card()
+                    .child(widgets::card_title("2 · 环境"))
                     .child(
-                        Button::new("blender-detect")
-                            .label("自动探测")
-                            .small()
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.img2box_find_blender(cx))),
-                    )
-                    .child(
-                        Button::new("blender-pick")
-                            .label("浏览…")
-                            .small()
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.img2box_pick_blender(cx))),
+                        widgets::field("Blender")
+                            .child(
+                                h_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .items_center()
+                                    .gap(px(10.))
+                                    .child(path_box(blender, true))
+                                    .child(widgets::button(
+                                        "img2box-blender-browse",
+                                        "浏览…",
+                                        false,
+                                        cx.listener(|this, _, _, cx| {
+                                            this.img2box_pick_blender(cx)
+                                        }),
+                                    ))
+                                    .child(widgets::button(
+                                        "img2box-blender-detect",
+                                        "自动探测",
+                                        false,
+                                        cx.listener(|this, _, _, cx| {
+                                            this.img2box_find_blender(cx)
+                                        }),
+                                    )),
+                            ),
                     )
                     .child(
                         div()
-                            .max_w(px(520.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(blender),
+                            .mt(px(6.))
+                            .pl(px(84.))
+                            .text_size(px(11.))
+                            .text_color(theme::muted())
+                            .child("支持 Blender 3.x / 4.x / 5.x,自动匹配对应版本模板;其他版本可能无法打开模板"),
+                    )
+                    .child(
+                        widgets::field("输出目录").mt(px(12.)).child(
+                            h_flex()
+                                .flex_1()
+                                .min_w_0()
+                                .items_center()
+                                .gap(px(10.))
+                                .child(path_box(out_dir, true))
+                                .child(widgets::button(
+                                    "img2box-out",
+                                    "浏览…",
+                                    false,
+                                    cx.listener(|this, _, _, cx| this.img2box_pick_out(cx)),
+                                )),
+                        ),
                     ),
             )
+            .child(widgets::runbar().child(widgets::button(
+                "img2box-run",
+                if running { "烘焙中…" } else { "开始转换" },
+                true,
+                cx.listener(|this, _, _, cx| this.run_img2box(cx)),
+            )))
             .child(
-                div()
-                    .text_xs()
-                    .text_color(theme.muted_foreground)
-                    .child("支持 Blender 3.x / 4.x / 5.x,自动匹配对应版本模板;烘焙在 Blender 后台进程中完成。"),
-            )
-            .child(
-                h_flex()
-                    .gap_3()
-                    .items_center()
+                widgets::card()
+                    .child(widgets::card_title("预览天空盒"))
                     .child(
-                        Button::new("img2box-run")
-                            .primary()
-                            .label(if running { "烘焙中…" } else { "开始转换" })
-                            .disabled(
-                                running
-                                    || self.img2box.hdri.is_empty()
-                                    || self.img2box.blender.is_empty(),
+                        widgets::field("面图目录")
+                            .child(
+                                h_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .items_center()
+                                    .gap(px(10.))
+                                    .child(path_box(skybox, false))
+                                    .child(widgets::button(
+                                        "img2box-skybox",
+                                        "浏览…",
+                                        false,
+                                        cx.listener(|this, _, _, cx| {
+                                            this.img2box_pick_skybox(cx)
+                                        }),
+                                    )),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .mt(px(12.))
+                            .pl(px(84.))
+                            .gap(px(14.))
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(theme::muted())
+                                    .child("在浏览器中打开 3D 天空盒(拖拽旋转视角),无需重新烘焙"),
                             )
-                            .on_click(cx.listener(|this, _, _, cx| this.run_img2box(cx))),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(Progress::new("img2box-progress").loading(running).value(0.0)),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(stage),
+                            .child(widgets::button(
+                                "img2box-preview",
+                                "在浏览器中预览",
+                                true,
+                                cx.listener(|this, _, _, cx| this.img2box_preview(cx)),
+                            )),
                     ),
             )
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(
-                        Button::new("skybox-pick")
-                            .label("选择面图目录…")
-                            .small()
-                            .on_click(cx.listener(|this, _, _, cx| this.img2box_pick_skybox(cx))),
-                    )
-                    .child(
-                        div()
-                            .max_w(px(420.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(if self.img2box.skybox_dir.is_empty() {
-                                "预览:未选择面图目录(right/left/top/bottom/front/back.png 所在)".to_string()
-                            } else {
-                                self.img2box.skybox_dir.clone()
-                            }),
-                    )
-                    .child(
-                        Button::new("skybox-open")
-                            .label("在浏览器中预览")
-                            .small()
-                            .disabled(self.img2box.skybox_dir.is_empty())
-                            .on_click(cx.listener(|this, _, _, cx| this.img2box_preview(cx))),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(preview_url.unwrap_or_default()),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_h_0()
-                    .gap_1()
-                    .p_3()
-                    .rounded(theme.radius)
-                    .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.muted)
-                    .overflow_hidden()
-                    .children(logs.into_iter().map(|line| {
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(line)
-                    })),
+                widgets::card()
+                    .child(widgets::card_title("运行日志"))
+                    .child(widgets::log_panel(logs)),
             )
     }
 

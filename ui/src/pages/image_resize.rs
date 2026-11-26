@@ -3,14 +3,35 @@
 //! 对应 Electron 版 `tools/image_resize/frontend/view.js`;后端命令 `resize_process`
 //! 与 `resize_cancel`。
 
-use gpui_kit::component::{
-    button::Button, button::ButtonVariants, checkbox::Checkbox, input::{Input, InputState},
-    progress::Progress, *,
-};
+use gpui_kit::component::{input::{Input, InputState}, *};
 use gpui_kit::*;
 use serde_json::json;
 
-use crate::Shell;
+use crate::{Shell, theme, widgets};
+
+/// 目标尺寸预设,与 Electron 版一致。
+pub const PRESETS: [(u32, u32); 7] = [
+    (64, 64),
+    (128, 128),
+    (256, 256),
+    (512, 512),
+    (800, 600),
+    (1024, 768),
+    (1920, 1080),
+];
+
+/// 自定义输入框:去掉组件自带外观,套一层与 `.text-input` 相同的边框。
+fn input_box(state: &Entity<InputState>, width: f32) -> impl IntoElement {
+    div()
+        .w(px(width))
+        .px(px(10.))
+        .py(px(6.))
+        .rounded(px(theme::RADIUS))
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::panel())
+        .child(Input::new(state).appearance(false))
+}
 
 pub struct ImageResizeState {
     pub input_dir: String,
@@ -59,14 +80,6 @@ impl ImageResizeState {
         }
     }
 
-    fn percent(&self) -> f32 {
-        let (done, total) = self.progress;
-        if total == 0 {
-            0.0
-        } else {
-            (done as f32 / total as f32) * 100.0
-        }
-    }
 }
 
 fn parse_size(value: &str) -> Option<i64> {
@@ -82,10 +95,7 @@ fn parse_size(value: &str) -> Option<i64> {
 
 impl Shell {
     pub(crate) fn resize_view(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
         let running = self.resize.running;
-        let progress = self.resize.progress;
-        let percent = self.resize.percent();
         let logs: Vec<String> = self
             .resize
             .logs
@@ -95,135 +105,136 @@ impl Shell {
             .rev()
             .cloned()
             .collect();
-        let input_dir = if self.resize.input_dir.is_empty() {
-            "未选择输入目录".to_string()
-        } else {
-            self.resize.input_dir.clone()
-        };
+        let input_dir = self.resize.input_dir.clone();
+        let out_dir = self.resize.output_dir.clone();
+        let keep_ratio = self.resize.keep_ratio;
+        let width_value = self.resize.width.read(cx).value().to_string();
+        let height_value = self.resize.height.read(cx).value().to_string();
+
+        let mut preset_row = h_flex().gap(px(8.)).items_center();
+        for (index, (w, h)) in PRESETS.iter().enumerate() {
+            let (w, h) = (*w, *h);
+            let active = width_value.trim() == w.to_string() && height_value.trim() == h.to_string();
+            preset_row = preset_row.child(widgets::chip(
+                ("resize-preset", index),
+                format!("{w}×{h}"),
+                active,
+                !running,
+                cx.listener(move |this, _, window, cx| {
+                    this.resize
+                        .width
+                        .update(cx, |state, cx| state.set_value(w.to_string(), window, cx));
+                    this.resize
+                        .height
+                        .update(cx, |state, cx| state.set_value(h.to_string(), window, cx));
+                    cx.notify();
+                }),
+            ));
+        }
 
         v_flex()
             .size_full()
             .min_h_0()
-            .gap_3()
-            .p_4()
-            .id("resize-page")
-            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
-                this.accept_drop(crate::Tab::ImageResize, paths.0.to_vec(), cx)
-            }))
-            .child(self.drop_banner(
-                &theme,
-                "拖拽文件夹到这里作为输入目录,或点「输入目录…」",
-            ))
+            .gap(px(16.))
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
+                widgets::card()
+                    .child(widgets::card_title("1 · 输入文件夹"))
                     .child(
-                        Button::new("resize-in")
-                            .label("输入目录…")
-                            .disabled(running)
+                        widgets::dropzone("resize-drop", "将文件夹拖到此处,或点击选择")
                             .on_click(cx.listener(|this, _, _, cx| this.resize_pick_dir(true, cx))),
                     )
                     .child(
                         div()
-                            .max_w(px(420.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(input_dir),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("resize-out")
-                            .label("输出目录…")
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.resize_pick_dir(false, cx))),
-                    )
-                    .child(
-                        div()
-                            .max_w(px(360.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(self.resize.output_dir.clone()),
-                    ),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(div().text_sm().child("目标尺寸:"))
-                    .child(div().w(px(120.)).child(Input::new(&self.resize.width)))
-                    .child(div().text_sm().child("×"))
-                    .child(div().w(px(120.)).child(Input::new(&self.resize.height)))
-                    .child(
-                        Checkbox::new("resize-ratio")
-                            .label("等比例居中(否则拉伸填满)")
-                            .checked(self.resize.keep_ratio)
-                            .disabled(running)
-                            .on_change(cx.listener(|this, checked, _, cx| {
-                                this.resize.keep_ratio = *checked;
-                                cx.notify();
-                            })),
-                    ),
-            )
-            .child(
-                h_flex()
-                    .gap_3()
-                    .items_center()
-                    .child(
-                        Button::new("resize-run")
-                            .primary()
-                            .label(if running { "处理中…" } else { "开始缩放" })
-                            .disabled(running || self.resize.input_dir.is_empty())
-                            .on_click(cx.listener(|this, _, _, cx| this.run_resize(cx))),
-                    )
-                    .child(
-                        Button::new("resize-cancel")
-                            .label("取消")
-                            .disabled(!running)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.send_job(crate::JobKind::Resize, "resize_cancel", json!({}));
-                                this.resize.push_log("已请求取消…");
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(Progress::new("resize-progress").value(percent)),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(if progress.1 == 0 {
-                                String::new()
+                            .mt(px(10.))
+                            .px(px(10.))
+                            .py(px(8.))
+                            .rounded(px(8.))
+                            .bg(theme::panel_2())
+                            .text_size(px(12.))
+                            .text_color(if input_dir.is_empty() {
+                                theme::muted()
                             } else {
-                                format!("{}/{}", progress.0, progress.1)
+                                theme::text()
+                            })
+                            .overflow_hidden()
+                            .child(if input_dir.is_empty() {
+                                "未选择输入文件夹".to_string()
+                            } else {
+                                input_dir
                             }),
                     ),
             )
             .child(
-                v_flex()
-                    .flex_1()
-                    .min_h_0()
-                    .gap_1()
-                    .p_3()
-                    .rounded(theme.radius)
-                    .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.muted)
-                    .overflow_hidden()
-                    .children(logs.into_iter().map(|line| {
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(line)
-                    })),
+                widgets::card()
+                    .child(widgets::card_title("2 · 输出文件夹"))
+                    .child(
+                        widgets::field("输出路径")
+                            .child(
+                                h_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .items_center()
+                                    .gap(px(10.))
+                                    .child(widgets::path_box(out_dir, true))
+                                    .child(widgets::button(
+                                        "resize-out",
+                                        "浏览…",
+                                        false,
+                                        cx.listener(|this, _, _, cx| {
+                                            this.resize_pick_dir(false, cx)
+                                        }),
+                                    )),
+                            ),
+                    ),
+            )
+            .child(
+                widgets::card()
+                    .child(widgets::card_title("3 · 目标尺寸"))
+                    .child(widgets::field("预设").child(preset_row))
+                    .child(
+                        widgets::field("自定义")
+                            .mt(px(12.))
+                            .child(input_box(&self.resize.width, 90.0))
+                            .child(div().text_size(px(12.)).text_color(theme::muted()).child("×"))
+                            .child(input_box(&self.resize.height, 90.0))
+                            .child(div().text_size(px(12.)).text_color(theme::muted()).child("像素"))
+                            .child(widgets::check_chip(
+                                "resize-ratio",
+                                "等比例(透明画布居中)",
+                                keep_ratio,
+                                !running,
+                                cx.listener(|this, _, _, cx| {
+                                    this.resize.keep_ratio = !this.resize.keep_ratio;
+                                    cx.notify();
+                                }),
+                            )),
+                    ),
+            )
+            .child(
+                widgets::runbar()
+                    .child(widgets::button(
+                        "resize-cancel",
+                        "取消",
+                        false,
+                        cx.listener(|this, _, _, cx| {
+                            this.send_job(crate::JobKind::Resize, "resize_cancel", json!({}));
+                            this.resize.push_log("已请求取消…");
+                            cx.notify();
+                        }),
+                    ))
+                    .child(widgets::button(
+                        "resize-run",
+                        if running { "处理中…" } else { "开始缩放" },
+                        true,
+                        cx.listener(|this, _, _, cx| this.run_resize(cx)),
+                    )),
+            )
+            .child(
+                widgets::card()
+                    .child(widgets::card_title("运行日志"))
+                    .child(widgets::log_panel(logs)),
             )
     }
-
     pub(crate) fn resize_pick_dir(&mut self, input: bool, cx: &mut Context<Self>) {
         let (tx, rx) = smol::channel::unbounded();
         std::thread::spawn(move || {

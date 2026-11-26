@@ -17,12 +17,16 @@
 
 **默认入口(Rust/GPUI 版界面)**:
 
-```bat
-start.bat
+双击 `start.vbs`(无控制台窗口)或运行 `start.bat`:
+
+```
+start.vbs     # 直接拉起已构建的界面 exe,不闪控制台
+start.bat     # 命令行入口;缺构建产物时会先 cargo build
 ```
 
 首次运行如果没有 `dist-gpui\ArtistToolkit.exe`,会先 `cargo build --release`(需要
 [Rust](https://rustup.rs) 与 MSVC Build Tools,约 3-8 分钟;之后秒开)。
+应用本身是 GUI 子系统、Python 后端用 `CREATE_NO_WINDOW` 启动,所以运行期**不会再弹控制台窗口**。
 旧版 Electron 界面保留为 `start-electron.bat`。
 
 **只跑 Python 后端 / 旧版 Tkinter 界面**:
@@ -104,7 +108,8 @@ ArtistToolkit/
 ├── ArtistToolkit.spec      # 旧版 Tkinter GUI 的 PyInstaller 配置
 ├── ArtistToolkit-backend.spec  # Python 后端 exe 的 PyInstaller 配置
 ├── build.bat               # 打包 Python 后端 exe + 旧版 GUI exe
-├── start.bat               # 双击启动 Electron 新版界面
+├── start.bat               # 命令行启动 GPUI 版界面(缺产物时自动构建)
+├── start.vbs               # 双击启动 GPUI 版界面(无控制台窗口)
 ├── ui/                     # Rust/GPUI 桌面前端(gpui-kit),当前默认界面
 ├── rust/                   # Rust 加速:rust-anything 生成的 crate + 录制用例
 │   ├── unmult-rs/          # 去底像素内核的 Rust 移植(PyO3),含 291 条录制与 REPORT.md

@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 //! ArtistToolkit 的 Rust/GPUI 前端(gpui-kit)。
 //!
 //! 界面外壳用 gpui-kit 的 Sidebar/Button/Label 等组件;功能通过 stdio JSON 复用现有
@@ -34,43 +36,35 @@ pub enum Tab {
 }
 
 impl Tab {
+    /// 顺序与 Electron 版 pp/renderer/features.js 一致。
     pub const ALL: [Tab; 5] = [
-        Tab::IconExport,
         Tab::AiMatting,
-        Tab::ImageResize,
         Tab::Unmult,
+        Tab::IconExport,
+        Tab::ImageResize,
         Tab::Img2Box,
     ];
 
     pub fn title(self) -> &'static str {
         match self {
-            Tab::IconExport => "图标批处理",
-            Tab::AiMatting => "AI 抠图",
-            Tab::ImageResize => "批量缩放",
-            Tab::Unmult => "去底",
-            Tab::Img2Box => "HDRI 转天空盒",
+            Tab::IconExport => "图集拆分",
+            Tab::AiMatting => "智能抠图",
+            Tab::ImageResize => "快捷尺寸",
+            Tab::Unmult => "特效抠图",
+            Tab::Img2Box => "天空盒烘焙",
         }
     }
 
     pub fn hint(self) -> &'static str {
         match self {
-            Tab::IconExport => "抠图 → 拆图标 → 按形状/尺寸裁切输出。",
-            Tab::AiMatting => "图片一键去背景,输出透明 PNG。",
-            Tab::ImageResize => "递归扫描图片,精确缩放到指定尺寸,保持目录结构。",
-            Tab::Unmult => "去黑底/去白底/自动判断,反预乘恢复直通色。",
-            Tab::Img2Box => "HDRI → Blender 烘焙 → 4×3 切图 → 6 个天空盒面。",
+            Tab::IconExport => "选择旧版拆分或 AI 图集命名流程",
+            Tab::AiMatting => "拖入图片 → AI 去除背景 → 输出透明背景 PNG(保留原尺寸)",
+            Tab::ImageResize => "递归扫描文件夹 → 精确缩放到目标尺寸 → 保持目录结构输出",
+            Tab::Unmult => "去掉黑底 / 白底,输出带真实 Alpha 的透明 PNG(火焰、烟雾、粒子、光效素材)",
+            Tab::Img2Box => "HDRI 全景图 → Blender 烘焙 → 4×3 网格切图 → 6 个天空盒面(含 bedwars 版)",
         }
     }
 
-    fn icon(self) -> IconName {
-        match self {
-            Tab::IconExport => IconName::GalleryVerticalEnd,
-            Tab::AiMatting => IconName::Bot,
-            Tab::ImageResize => IconName::Maximize,
-            Tab::Unmult => IconName::Frame,
-            Tab::Img2Box => IconName::Globe,
-        }
-    }
 }
 
 /// 一次性查询(非长任务),走同一套 stdio 协议。
@@ -119,10 +113,11 @@ impl Shell {
                     Some("matting") => Tab::AiMatting,
                     Some("resize") => Tab::ImageResize,
                     Some("img2box") => Tab::Img2Box,
+                    Some("unmult") => Tab::Unmult,
                     _ => Tab::Unmult,
                 }
             } else {
-                Tab::Unmult
+                Tab::AiMatting
             },
             backend,
             unmult: UnmultState::default(),
@@ -180,24 +175,6 @@ impl Shell {
             .detach();
         }
         shell
-    }
-
-    /// 各页顶部的拖放提示条(拖放监听挂在页面根元素上)。
-    pub(crate) fn drop_banner(
-        &self,
-        theme: &gpui_kit::component::Theme,
-        text: &str,
-    ) -> impl IntoElement {
-        div()
-            .w_full()
-            .p_2()
-            .rounded(theme.radius)
-            .border_1()
-            .border_color(theme.border)
-            .bg(theme.muted)
-            .text_sm()
-            .text_color(theme.muted_foreground)
-            .child(text.to_string())
     }
 
     /// 接受一次文件拖放(来自 `on_drop`,或开发期 `ATK_UI_DROP`)。
@@ -602,8 +579,24 @@ fn main() {
         gpui_kit::init(cx);
         theme::install(cx);
 
+        // ATK_UI_WINDOW_POS="x,y,w,h":直接放到指定位置(截图脚本用它把窗口开在副屏)。
+        let bounds = std::env::var("ATK_UI_WINDOW_POS")
+            .ok()
+            .and_then(|value| {
+                let parts: Vec<f32> = value
+                    .split(',')
+                    .filter_map(|part| part.trim().parse::<f32>().ok())
+                    .collect();
+                (parts.len() == 4).then(|| {
+                    WindowBounds::Windowed(Bounds::new(
+                        point(px(parts[0]), px(parts[1])),
+                        size(px(parts[2]), px(parts[3])),
+                    ))
+                })
+            })
+            .unwrap_or_else(|| WindowBounds::centered(None, size(px(1264.), px(861.)), cx));
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(None, size(px(1264.), px(861.)), cx)),
+            window_bounds: Some(bounds),
             titlebar: Some(TitlebarOptions {
                 title: Some("Artist Toolkit".into()),
                 appears_transparent: false,

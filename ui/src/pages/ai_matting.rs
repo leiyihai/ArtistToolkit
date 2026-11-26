@@ -4,11 +4,11 @@
 
 use std::path::PathBuf;
 
-use gpui_kit::component::{button::Button, button::ButtonVariants, progress::Progress, *};
+use gpui_kit::component::*;
 use gpui_kit::*;
 use serde_json::json;
 
-use crate::Shell;
+use crate::{Shell, theme, widgets};
 
 pub struct AiMattingState {
     pub paths: Vec<PathBuf>,
@@ -58,27 +58,16 @@ impl AiMattingState {
         }
     }
 
-    fn percent(&self) -> f32 {
-        let (done, total) = self.progress;
-        if total == 0 {
-            0.0
-        } else {
-            (done as f32 / total as f32) * 100.0
-        }
-    }
 }
 
 impl Shell {
     pub(crate) fn matting_view(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
         let running = self.matting.running;
         let picked = if self.matting.paths.is_empty() {
             "未选择图片".to_string()
         } else {
             format!("已选 {} 张", self.matting.paths.len())
         };
-        let progress = self.matting.progress;
-        let percent = self.matting.percent();
         let logs: Vec<String> = self
             .matting
             .logs
@@ -88,115 +77,90 @@ impl Shell {
             .rev()
             .cloned()
             .collect();
+        let out_dir = self.matting.out_dir.clone();
 
         v_flex()
             .size_full()
             .min_h_0()
-            .gap_3()
-            .p_4()
-            .id("matting-page")
-            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
-                this.accept_drop(crate::Tab::AiMatting, paths.0.to_vec(), cx)
-            }))
-            .child(self.drop_banner(
-                &theme,
-                "拖拽图片到这里(PNG / JPG / WebP,可多张),或点「选择图片…」",
-            ))
+            .gap(px(16.))
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
+                widgets::card()
+                    .child(widgets::card_title("1 · 添加图片"))
                     .child(
-                        Button::new("matting-pick")
-                            .label("选择图片…")
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.matting_pick_images(cx))),
+                        widgets::dropzone(
+                            "matting-drop",
+                            "将图片拖到此处,或点击选择(PNG / JPG / WebP,可多张)",
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| this.matting_pick_images(cx))),
                     )
                     .child(
-                        div()
-                            .text_sm()
-                            .text_color(theme.muted_foreground)
-                            .child(picked),
-                    )
-                    .child(
-                        Button::new("matting-clear")
-                            .label("清空")
-                            .small()
-                            .disabled(running || self.matting.paths.is_empty())
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.matting.paths.clear();
-                                cx.notify();
-                            })),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("matting-out")
-                            .label("输出目录…")
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.matting_pick_output_dir(cx))),
-                    )
-                    .child(
-                        div()
-                            .max_w(px(360.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(self.matting.out_dir.clone()),
+                        h_flex()
+                            .mt(px(12.))
+                            .gap(px(10.))
+                            .items_center()
+                            .child(widgets::button(
+                                "matting-pick",
+                                "选择图片…",
+                                false,
+                                cx.listener(|this, _, _, cx| this.matting_pick_images(cx)),
+                            ))
+                            .child(widgets::button(
+                                "matting-clear",
+                                "清空",
+                                false,
+                                cx.listener(|this, _, _, cx| {
+                                    this.matting.paths.clear();
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(theme::muted())
+                                    .child(picked),
+                            ),
                     ),
             )
             .child(
-                div()
-                    .text_xs()
-                    .text_color(theme.muted_foreground)
-                    .child("首次使用会加载模型(约 1GB);有 GPU 自动加速,否则用 CPU。"),
-            )
-            .child(
-                h_flex()
-                    .gap_3()
-                    .items_center()
+                widgets::card()
+                    .child(widgets::card_title("2 · 输出设置"))
                     .child(
-                        Button::new("matting-run")
-                            .primary()
-                            .label(if running { "处理中…" } else { "开始抠图" })
-                            .disabled(running || self.matting.paths.is_empty())
-                            .on_click(cx.listener(|this, _, _, cx| this.run_matting(cx))),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(Progress::new("matting-progress").value(percent)),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(if progress.1 == 0 {
-                                String::new()
-                            } else {
-                                format!("{}/{}", progress.0, progress.1)
-                            }),
+                        widgets::field("输出路径")
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .px(px(10.))
+                                    .py(px(8.))
+                                    .rounded(px(theme::RADIUS))
+                                    .border_1()
+                                    .border_color(theme::border())
+                                    .bg(theme::panel())
+                                    .text_size(px(12.))
+                                    .text_color(theme::muted())
+                                    .overflow_hidden()
+                                    .child(out_dir),
+                            )
+                            .child(widgets::button(
+                                "matting-out",
+                                "浏览…",
+                                false,
+                                cx.listener(|this, _, _, cx| this.matting_pick_output_dir(cx)),
+                            )),
                     ),
             )
+            .child(widgets::runbar().child(widgets::button(
+                "matting-run",
+                if running { "处理中…" } else { "开始抠图" },
+                true,
+                cx.listener(|this, _, _, cx| this.run_matting(cx)),
+            )))
             .child(
-                v_flex()
-                    .flex_1()
-                    .min_h_0()
-                    .gap_1()
-                    .p_3()
-                    .rounded(theme.radius)
-                    .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.muted)
-                    .overflow_hidden()
-                    .children(logs.into_iter().map(|line| {
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(line)
-                    })),
+                widgets::card()
+                    .child(widgets::card_title("运行日志"))
+                    .child(widgets::log_panel(logs)),
             )
     }
-
     pub(crate) fn matting_pick_images(&mut self, cx: &mut Context<Self>) {
         let (tx, rx) = smol::channel::unbounded();
         std::thread::spawn(move || {

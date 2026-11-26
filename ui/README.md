@@ -1,10 +1,10 @@
 # ArtistToolkit · Rust/GPUI 前端
 
-![图标批处理页](docs/screenshot-icon.png)
-![AI 抠图页](docs/screenshot-matting.png)
-![批量缩放页](docs/screenshot-resize.png)
-![HDRI 转天空盒页](docs/screenshot-img2box.png)
-![去底页](docs/screenshot.png)
+![图集拆分页](docs/screenshot-icon.png)
+![智能抠图页](docs/screenshot-matting.png)
+![快捷尺寸页](docs/screenshot-resize.png)
+![天空盒烘焙页](docs/screenshot-img2box.png)
+![特效抠图页](docs/screenshot.png)
 
 用 [gpui-kit](https://github.com/longbridge/gpui-kit)(GPUI 组件库)重写的桌面界面,
 用来替换 Electron 外壳。
@@ -16,7 +16,7 @@
 - `ui/src/theme.rs`:覆盖 gpui-kit 全局主题(背景/边框/主色/圆角/字体),组件与自绘控件共用一套色板
 - `ui/src/widgets.rs`:卡片、卡片标题、按钮(默认/主色)、分段选择、chip、复选 chip、字段行、拖放区、日志面板、运行条
 - 侧边栏 208px 白底 + 品牌圆点 + 纯文本页签(选中珊瑚橙浅底,与 `.nav-btn.active` 一致)
-- 已还原页:图标批处理、去底;其余三页布局待下一轮
+- 已还原页:**全部五页**(图集拆分 / 智能抠图 / 快捷尺寸 / 特效抠图 / 天空盒烘焙),页签名与顺序同 Electron(features.js)
 
 原版截图基准在 `docs/reference/electron-*.png`,由 `scripts/capture_reference.py` 通过 DevTools 协议逐页抓取。
 
@@ -28,11 +28,11 @@
 
 | 页签 | 状态 | 后端命令 |
 | --- | --- | --- |
-| 图标批处理 | ✅ 拖拽/选图/裁切类型/尺寸/圆角/统一大小/日志 | `icon_process` |
-| AI 抠图 | ✅ 拖拽/选图/输出目录/进度/日志 | `matting_process` |
-| 批量缩放 | ✅ 拖拽文件夹/输入输出目录/目标尺寸/等比模式/取消/进度 | `resize_process`、`resize_cancel` |
-| 去底 | ✅ 拖拽/选图/模式/去边/重建 Alpha/进度 | `unmult_process` |
-| HDRI 转天空盒 | ✅ 拖拽 HDRI/Blender 自动探测/烘焙/预览 | `img2box_process`、`img2box_find_blender`、`img2box_preview` |
+| 图集拆分 | ✅ 拖拽/选图/裁切类型/尺寸/圆角/统一大小/日志 | `icon_process` |
+| 智能抠图 | ✅ 拖拽/选图/输出目录/日志 | `matting_process` |
+| 快捷尺寸 | ✅ 拖拽文件夹/输入输出目录/预设与自定义尺寸/等比/取消 | `resize_process`、`resize_cancel` |
+| 特效抠图 | ✅ 拖拽/选图/背景模式/去边/重建 Alpha/跳过已存在 | `unmult_process` |
+| 天空盒烘焙 | ✅ 拖拽 HDRI/Blender 自动探测/烘焙/预览 | `img2box_process`、`img2box_find_blender`、`img2box_preview` |
 
 **拖拽**:每页顶部有提示条,把文件直接拖进窗口即可(与 Electron 版一致)——图片页追加图片并按路径去重,
 批量缩放接受文件夹作为输入目录,天空盒取第一张图片作为 HDRI。截图:[去底页拖入 2 张](docs/screenshot-drop.png)。
@@ -93,7 +93,12 @@ $env:ATK_UI_NO_BROWSER='1'                          # 预览时不要真的打�
 powershell -File scripts\screenshot.ps1 -Out _shot.png
 ```
 
-`screenshot.ps1` 会启动应用、把窗口置顶、截全屏 PNG 再退出,用于验证界面改动。
+`screenshot.ps1` 会启动应用、把窗口放到**副屏**、截该屏(可裁成窗口)再退出,用于验证界面改动:
+
+- 默认选第一块非主屏,避免打断主屏工作;可用 `-Monitor 1` 指定
+- `-Crop`:只截窗口客户区(文档截图用的就是它,输出 1264×861,与 Electron 基准同尺寸)
+- `-WindowStyle Hidden`:debug 构建自带控制台,脚本会把它隐藏
+- `ATK_UI_WINDOW_POS="x,y,w,h"`:让应用直接开在指定位置(脚本用它把窗口开在副屏,不闪主屏)
 
 ## 验证过的端到端场景
 

@@ -33,6 +33,13 @@ impl Backend {
             (cmd, "python")
         };
         let mut cmd = cmd;
+        // Windows:不要给后端弹出控制台窗口(stdio 走管道,不需要 console)。
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt as _;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
         cmd.current_dir(root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

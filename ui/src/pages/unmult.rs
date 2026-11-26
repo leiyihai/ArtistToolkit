@@ -93,14 +93,6 @@ impl UnmultState {
         }
     }
 
-    fn percent(&self) -> f32 {
-        let (done, total) = self.progress;
-        if total == 0 {
-            0.0
-        } else {
-            (done as f32 / total as f32) * 100.0
-        }
-    }
 }
 
 impl Shell {

@@ -210,6 +210,23 @@ pub fn dropzone(id: impl Into<ElementId>, text: &'static str) -> Stateful<Div> {
         .child(text)
 }
 
+/// 只读路径框(Electron 版 `.text-input` 的展示形态)。
+pub fn path_box(text: impl Into<SharedString>, dim: bool) -> Div {
+    div()
+        .flex_1()
+        .min_w_0()
+        .px(px(10.))
+        .py(px(8.))
+        .rounded(px(theme::RADIUS))
+        .border_1()
+        .border_color(theme::border())
+        .bg(theme::panel())
+        .text_size(px(12.))
+        .text_color(if dim { theme::muted() } else { theme::text() })
+        .overflow_hidden()
+        .child(text.into())
+}
+
 /// 日志面板(`.log`):等宽 12px、90px 高、浅底。
 pub fn log_panel(lines: Vec<String>) -> Div {
     let mut body = v_flex()
