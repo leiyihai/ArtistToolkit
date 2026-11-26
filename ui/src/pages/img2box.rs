@@ -104,8 +104,21 @@ impl Shell {
                         widgets::dropzone(
                             "img2box-drop",
                             "将 HDRI 图片拖到此处,或点击选择(单张 PNG)",
+                            self.drag_over,
                         )
-                        .on_click(cx.listener(|this, _, _, cx| this.img2box_pick_hdri(cx))),
+                        .on_click(cx.listener(|this, _, _, cx| this.img2box_pick_hdri(cx)))
+                        .on_drag_move(cx.listener(
+                            |this, _: &DragMoveEvent<ExternalPaths>, _, cx| {
+                                if !this.drag_over {
+                                    this.drag_over = true;
+                                    cx.notify();
+                                }
+                            },
+                        ))
+                        .on_file_drop_exit(cx.listener(|this, _, _, cx| {
+                            this.drag_over = false;
+                            cx.notify();
+                        })),
                     )
                     .child(
                         h_flex()

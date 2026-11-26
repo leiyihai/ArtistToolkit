@@ -196,7 +196,7 @@ pub fn field(label: &'static str) -> Div {
 }
 
 /// 拖放区(`.dropzone`):1.5px 虚线、居中 muted 文案。
-pub fn dropzone(id: impl Into<ElementId>, text: &'static str) -> Stateful<Div> {
+pub fn dropzone(id: impl Into<ElementId>, text: &'static str, active: bool) -> Stateful<Div> {
     div()
         .id(id)
         .w_full()
@@ -207,9 +207,17 @@ pub fn dropzone(id: impl Into<ElementId>, text: &'static str) -> Stateful<Div> {
         .py(px(18.))
         .rounded(px(theme::RADIUS))
         .border(px(1.5))
-        .border_color(theme::border_strong())
+        .border_color(if active {
+            theme::accent()
+        } else {
+            theme::border_strong()
+        })
+        .when(active, |this| {
+            this.bg(theme::accent_dim()).text_color(theme::text())
+        })
         .text_size(px(13.))
         .text_color(theme::muted())
+        .cursor_pointer()
         .child(text)
 }
 
@@ -250,9 +258,14 @@ pub fn log_panel(lines: Vec<String>) -> Div {
 }
 
 /// 缩略图网格(`.thumbs`):92px 宽的卡片,图片 64px 高,下面 11px 文件名。
-pub fn thumb_grid(cache: &ThumbCache, paths: &[PathBuf]) -> impl IntoElement {
+pub fn thumb_grid(
+    cache: &ThumbCache,
+    paths: &[PathBuf],
+    on_remove: impl Fn(usize, &ClickEvent, &mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    let on_remove = std::rc::Rc::new(on_remove);
     let mut grid = h_flex().w_full().flex_wrap().gap(px(10.));
-    for path in paths {
+    for (index, path) in paths.iter().enumerate() {
         let name = path
             .file_name()
             .map(|name| name.to_string_lossy().to_string())
@@ -268,8 +281,10 @@ pub fn thumb_grid(cache: &ThumbCache, paths: &[PathBuf]) -> impl IntoElement {
                 .child("无法预览")
                 .into_any_element(),
         };
+        let remove = on_remove.clone();
         grid = grid.child(
             v_flex()
+                .relative()
                 .w(px(92.))
                 .p(px(6.))
                 .gap(px(5.))
@@ -293,6 +308,25 @@ pub fn thumb_grid(cache: &ThumbCache, paths: &[PathBuf]) -> impl IntoElement {
                         .text_color(theme::muted())
                         .overflow_hidden()
                         .child(name),
+                )
+                .child(
+                    div()
+                        .id(("thumb-remove", index))
+                        .absolute()
+                        .top(px(3.))
+                        .right(px(3.))
+                        .size(px(18.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded_full()
+                        .bg(Hsla::from(rgba(0x1e1d1d8c)))
+                        .text_size(px(12.))
+                        .text_color(theme::white())
+                        .cursor_pointer()
+                        .hover(|this| this.bg(theme::danger()))
+                        .child("×")
+                        .on_click(move |event, window, cx| remove(index, event, window, cx)),
                 ),
         );
     }

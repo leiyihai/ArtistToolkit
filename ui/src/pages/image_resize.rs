@@ -140,8 +140,24 @@ impl Shell {
                 widgets::card()
                     .child(widgets::card_title("1 · 输入文件夹"))
                     .child(
-                        widgets::dropzone("resize-drop", "将文件夹拖到此处,或点击选择")
-                            .on_click(cx.listener(|this, _, _, cx| this.resize_pick_dir(true, cx))),
+                        widgets::dropzone(
+                            "resize-drop",
+                            "将文件夹拖到此处,或点击选择",
+                            self.drag_over,
+                        )
+                            .on_click(cx.listener(|this, _, _, cx| this.resize_pick_dir(true, cx)))
+                        .on_drag_move(cx.listener(
+                            |this, _: &DragMoveEvent<ExternalPaths>, _, cx| {
+                                if !this.drag_over {
+                                    this.drag_over = true;
+                                    cx.notify();
+                                }
+                            },
+                        ))
+                        .on_file_drop_exit(cx.listener(|this, _, _, cx| {
+                            this.drag_over = false;
+                            cx.notify();
+                        })),
                     )
                     .child(
                         div()

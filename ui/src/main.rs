@@ -100,6 +100,8 @@ pub struct Shell {
     ping_id: Option<u64>,
     /// 后端最近一次状态提示(侧边栏底部)。
     pub status: String,
+    /// 文件正被拖到窗口里(用于 dropzone 高亮)。
+    pub drag_over: bool,
 }
 
 impl Shell {
@@ -133,6 +135,7 @@ impl Shell {
             job: None,
             ping_id: None,
             status: "后端连接中…".to_string(),
+            drag_over: false,
         };
         shell.ping_id = Some(shell.backend.request("ping", serde_json::json!({})));
         // 滑杆自身不驱动重绘:订阅变更后通知界面刷新。
@@ -192,6 +195,7 @@ impl Shell {
 
     /// 接受一次文件拖放(来自 `on_drop`,或开发期 `ATK_UI_DROP`)。
     pub(crate) fn accept_drop(&mut self, tab: Tab, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        self.drag_over = false;
         let images: Vec<PathBuf> = paths.iter().filter(|path| is_image(path)).cloned().collect();
         match tab {
             Tab::ImageResize => {

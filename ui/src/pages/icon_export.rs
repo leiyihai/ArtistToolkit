@@ -148,7 +148,20 @@ impl Shell {
         let rounded = self.icon.crop == Crop::RoundedSquare;
         let total: usize = self.icon.paths.len();
         let corner_px = self.icon.corner.read(cx).value().start().round() as u32;
-        let thumbs = widgets::thumb_grid(&self.icon.thumbs, &self.icon.paths).into_any_element();
+        let shell = cx.entity();
+        let thumbs = widgets::thumb_grid(
+            &self.icon.thumbs,
+            &self.icon.paths,
+            move |index, _event, _window, cx| {
+                shell.update(cx, |this, cx| {
+                    if index < this.icon.paths.len() {
+                        this.icon.paths.remove(index);
+                        cx.notify();
+                    }
+                });
+            },
+        )
+        .into_any_element();
 
         // 分段选择:裁切类型
         let mut crop_seg = widgets::seg_container();
@@ -197,8 +210,19 @@ impl Shell {
                         widgets::dropzone(
                             "icon-drop",
                             "将图片拖到此处,或点击选择(PNG / JPG / WebP,可多张)",
+                            self.drag_over,
                         )
-                        .on_click(cx.listener(|this, _, _, cx| this.icon_pick_images(cx))),
+                        .on_click(cx.listener(|this, _, _, cx| this.icon_pick_images(cx)))
+                        .on_drag_move(cx.listener(|this, _: &DragMoveEvent<ExternalPaths>, _, cx| {
+                            if !this.drag_over {
+                                this.drag_over = true;
+                                cx.notify();
+                            }
+                        }))
+                        .on_file_drop_exit(cx.listener(|this, _, _, cx| {
+                            this.drag_over = false;
+                            cx.notify();
+                        })),
                     )
                     .child(
                         h_flex()

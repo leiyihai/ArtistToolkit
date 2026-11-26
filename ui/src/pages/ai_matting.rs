@@ -74,7 +74,20 @@ impl Shell {
             format!("已选 {} 张", self.matting.paths.len())
         };
         let total = self.matting.paths.len();
-        let thumbs = widgets::thumb_grid(&self.matting.thumbs, &self.matting.paths).into_any_element();
+        let shell = cx.entity();
+        let thumbs = widgets::thumb_grid(
+            &self.matting.thumbs,
+            &self.matting.paths,
+            move |index, _event, _window, cx| {
+                shell.update(cx, |this, cx| {
+                    if index < this.matting.paths.len() {
+                        this.matting.paths.remove(index);
+                        cx.notify();
+                    }
+                });
+            },
+        )
+        .into_any_element();
         let logs: Vec<String> = self
             .matting
             .logs
@@ -97,8 +110,21 @@ impl Shell {
                         widgets::dropzone(
                             "matting-drop",
                             "将图片拖到此处,或点击选择(PNG / JPG / WebP,可多张)",
+                            self.drag_over,
                         )
-                        .on_click(cx.listener(|this, _, _, cx| this.matting_pick_images(cx))),
+                        .on_click(cx.listener(|this, _, _, cx| this.matting_pick_images(cx)))
+                        .on_drag_move(cx.listener(
+                            |this, _: &DragMoveEvent<ExternalPaths>, _, cx| {
+                                if !this.drag_over {
+                                    this.drag_over = true;
+                                    cx.notify();
+                                }
+                            },
+                        ))
+                        .on_file_drop_exit(cx.listener(|this, _, _, cx| {
+                            this.drag_over = false;
+                            cx.notify();
+                        })),
                     )
                     .child(
                         h_flex()
