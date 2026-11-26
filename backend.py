@@ -27,6 +27,7 @@ _models_dir = os.environ.get("ATK_MODELS_DIR", "")
 if _models_dir and os.path.exists(os.path.join(_models_dir, "birefnet-general.onnx")):
     os.environ.setdefault("U2NET_HOME", _models_dir)
 
+from tools import ort_ep
 from tools.icon_export.core import process_batch as icon_process, selftest as icon_selftest
 from tools.icon_export.core import DEFAULT_MODEL as icon_default_model
 from tools.ai_matting.core import process_batch as matting_process, selftest as matting_selftest
@@ -82,6 +83,9 @@ def main():
         try:
             if cmd == "ping":
                 emit(out, rid, ok=True, result="pong")
+            elif cmd == "engine_info":
+                # 推理后端状态:打包后确认是否真的走 GPU(PyInstaller 漏收 DirectML.dll 时会静默回 CPU)
+                emit(out, rid, ok=True, result=ort_ep.status())
             elif cmd == "selftest":
                 results = [icon_selftest(), matting_selftest(), resize_selftest(), img2box_selftest(), unmult_selftest()]
                 ok = all(r[0] for r in results)

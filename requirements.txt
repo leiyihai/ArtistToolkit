@@ -1,6 +1,12 @@
 # 运行时依赖(打包后的 exe 已内置,无需他人安装)
 rembg>=2.0.76
-onnxruntime>=1.27.0      # CPU 通用;有 NVIDIA GPU 可换成 onnxruntime-gpu
+# 推理后端:Windows 用 DirectML(任意 DX12 显卡、含核显,免装 CUDA),其它平台用 CPU 版。
+# 三个包互斥——它们的 import 名都叫 onnxruntime,只能装一个:
+#   onnxruntime-directml   Windows + GPU(DirectML),默认选这个
+#   onnxruntime-gpu        有 CUDA/cuDNN 时比 DirectML 更快,但要用户自己装 CUDA
+#   onnxruntime            纯 CPU 兜底
+onnxruntime-directml>=1.20.0 ; sys_platform == "win32"
+onnxruntime>=1.20.0 ; sys_platform != "win32"
 scipy>=1.14.0
 Pillow>=11.0.0
 numpy>=1.26.0

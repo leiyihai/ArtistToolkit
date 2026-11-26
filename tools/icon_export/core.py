@@ -15,6 +15,14 @@ import time
 
 from PIL import Image, ImageDraw
 
+try:
+    from tools import matting_refine, ort_ep
+except ImportError:  # `python tools/icon_export/core.py` 直接跑自检时,仓库根不在 sys.path
+    import sys
+
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from tools import matting_refine, ort_ep
+
 __all__ = ["CROP_TYPES", "process_batch", "segment_component_boxes"]
 
 # ---------- 配置 ----------
@@ -110,23 +118,32 @@ def matting(img, model=DEFAULT_MODEL, log=None):
     if model not in _sessions:
         if model == _MODEL_NAME:
             _ensure_model(log)  # 包内自带 birefnet,读一遍并按块打进度
-        from rembg import remove, new_session
-        _remove_fn = remove  # 缓存到全局,避免每次 import
         if log:
             log(f"  加载模型 {MODELS[model]}…")
-        _sessions[model] = new_session(model)
+        # 推理设备由 tools/ort_ep 选:Windows 优先 DirectML,失败回退 CPU
+        _sessions[model] = ort_ep.session(model, log=log)
+        if log:
+            log(f"  推理设备: {ort_ep.device(_sessions[model])}")
+    if _remove_fn is None:
+        from rembg import remove
+
+        _remove_fn = remove  # 缓存到全局,避免每次 import
     if log:
         log("  抠图中…")
-    # 与原 run.py 相同的边缘参数:小图(≤3M 像素)启用 alpha_matting 细化边缘
-    use_matting = img.size[0] * img.size[1] <= MAX_MATTING_PIXELS
-    return _remove_fn(
-        img,
-        session=_sessions[model],
-        alpha_matting=use_matting,
-        alpha_matting_foreground_threshold=ALPHA_MATTING_FOREGROUND,
-        alpha_matting_background_threshold=ALPHA_MATTING_BACKGROUND,
-        alpha_matting_erode_size=ALPHA_MATTING_ERODE,
-    )
+    sess = _sessions[model]
+    # 与原 run.py 相同的边缘参数:小图(≤3M 像素)启用 alpha 精修
+    use_matting = matting_refine.matting_enabled(img.size[0] * img.size[1], MAX_MATTING_PIXELS)
+    if use_matting:
+        # 精修走本地实现:与 rembg 同一算法,但 CG 收敛阈值可调(默认 1e-5,实测约 1.7×)
+        return matting_refine.refine_cutout(
+            img,
+            sess,
+            foreground_threshold=ALPHA_MATTING_FOREGROUND,
+            background_threshold=ALPHA_MATTING_BACKGROUND,
+            erode_size=ALPHA_MATTING_ERODE,
+            log=log,
+        )
+    return _remove_fn(img, session=sess, alpha_matting=False)
 
 
 def is_transparent(img):
@@ -577,7 +594,7 @@ def selftest():
     if n.size != (128, 128):
         return False, f"normalize 输出尺寸错误: {n.size}"
     import rembg  # 验证打包环境 rembg 完整可用
-    return True, f"OK, 图标 {[i.size for i in icons]}, rembg {rembg.__version__}"
+    return True, f"OK, 图标 {[i.size for i in icons]}, rembg {rembg.__version__}, {ort_ep.summary()}"
 
 
 # >>> rust-anything: icon-export-rs is on. `rust-anything disable ../../rust/icon-export-rs` removes this block.

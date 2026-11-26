@@ -14,7 +14,7 @@
 
 - Python ≥ 3.10(后端依赖:`pip install -r requirements.txt`)
 - Rust 1.97+ 与 MSVC Build Tools(编译界面与 Rust 内核)
-- NVIDIA GPU(可选,有 GPU 自动加速,没 GPU 自动用 CPU)
+- 显卡(可选):Windows 上抠图默认走 DirectML,任意 DX12 显卡(含核显)都能加速,不需要装 CUDA;没有可用显卡时自动回退 CPU
 - Blender(仅「天空盒烘焙」需要)
 
 ## 安装运行
@@ -132,6 +132,52 @@ Python 接口与界面都不变,`process_batch` 只在内部换成 Rust 实现:
 | 人像精细(BiRefNet)`birefnet-general` | 人像照片,发丝边缘 | 慢(2048×1152 约 20s/张) |
 
 > BiRefNet 会把整块深色底判成前景,卡通图集建议用通用模型。
+
+## 抠图加速(GPU)
+
+推理默认走 **DirectML**(Windows 自带的 DX12 计算后端),不要求装 CUDA/cuDNN。
+选择逻辑在 `tools/ort_ep.py`:DirectML → CUDA → CPU 依次尝试,GPU 建会话失败时
+记一行日志并回退,不会让任务失败。
+
+实测(RTX 4060,1024×1024,`rembg.remove` 单张,仅推理):
+
+| 模型 | CPU | DirectML | 倍数 |
+| --- | ---: | ---: | ---: |
+| 通用(ISNet) | 0.64 s | 0.13 s | 4.9× |
+| 经典(U2Net) | 0.26 s | 0.04 s | 6.5× |
+| 人像精细(BiRefNet) | 12.0 s | — | 固定 CPU |
+
+- **BiRefNet 固定走 CPU**:它的融合节点在 DirectML 上直接报错(`DmlFusedNode`),
+  而且失败一次会让同进程后续会话一起回退,所以 `tools/ort_ep.py` 里按模型白名单
+  (`CPU_ONLY`)隔离。
+- **端到端倍数小于上表**:批处理还包含 PNG 解码/编码与掩膜合成,1024² 图更会跑
+  `alpha_matting`(pymatting,纯 CPU)。实测(RTX 4060,`process_batch` 全流程,稳定后取最快一轮):
+
+  | 场景 | 优化前(CPU) | 仅 DirectML | DirectML + 精修调优 |
+  | --- | ---: | ---: | ---: |
+  | 图标图集 2048² ×2(matting + 拆分 + 裁切) | 8.65 s | 2.29 s(3.8×) | 2.29 s |
+  | AI 抠图 2048² ×4(超 3M 像素,不开精修) | 0.91 s/张 | 0.47 s/张(1.9×) | 0.47 s/张 |
+  | AI 抠图 1024² ×6(开精修) | 3.43 s/张 | 2.88 s/张(1.2×) | **1.85 s/张(1.9×)** |
+
+- **小图的第二道瓶颈:alpha 精修**。≤3M 像素时 rembg 会跑 pymatting 的 closed-form
+  求解(1024² 图集约 2.6 s,其中 93% 是 `estimate_alpha_cf`)。`tools/matting_refine.py`
+  按同一算法重写这一步,只把 CG 收敛阈值从默认 `1e-7` 放宽到 `1e-5`:
+  同一张 1024² 图集 4.38 s → 2.85 s(1.5×),alpha 最大差 14/255、平均 0.009,
+  差值 >32 的像素 **0 个**。开关:
+  - `ATK_ALPHA_MATTING=off` 跳过精修(最快,边缘变硬);
+  - `ATK_ALPHA_MATTING_RTOL=1e-4` 再快约 2 倍,但软边缘会有成片差异,不建议默认;
+  - 精修过程任何异常都会自动退回普通抠图,不阻断批处理。
+
+- **质量**:CPU 与 DirectML 输出同一张 1024²/2048² 图,Alpha 最大通道差 1(逐像素比较),
+  没有可见差异。
+- **验证是否真的走了 GPU**:后端支持 `engine_info` 命令,返回
+  `{"onnxruntime": ..., "sessions": {"isnet-general-use": "DirectML(GPU)"}, ...}`;
+  界面日志里也会打印一行 `推理设备: DirectML(GPU)`。若显示 CPU,通常是打包时漏了
+  `DirectML.dll`(见 `ArtistToolkit-backend.spec` 的 `directml_binaries()`)。
+- **覆盖开关**:`ATK_ORT_PROVIDERS=cpu` 强制 CPU;`ATK_ORT_PROVIDERS=dml` 或 `cuda`
+  强制对应后端(显式值同样会在失败时回退)。
+- **装哪个包**:`onnxruntime-directml` / `onnxruntime-gpu` / `onnxruntime` 三选一
+  (import 名都叫 `onnxruntime`),见 `requirements.txt`。
 
 ## 新增一个 TAB 页
 

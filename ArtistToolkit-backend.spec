@@ -55,11 +55,34 @@ a = Analysis(
     noarchive=False,
 )
 
-# 过滤 onnxruntime 的 CUDA / TensorRT provider(CPU 通用版用不到)
+# 过滤 onnxruntime 的 CUDA / TensorRT provider(CPU 与 DirectML 版用不到;
+# DirectML.dll 不在这些名字里,会被保留——它决定打包版能不能走 GPU)。
 a.binaries = [
     b for b in a.binaries
     if not any(k in b[0].lower() for k in ('providers_cuda', 'providers_tensorrt', 'cudnn', 'cublas', 'cufft', 'curand', 'cusparse', 'cusolver'))
 ]
+
+
+def directml_binaries():
+    """兜底收集 DirectML.dll。
+
+    pyinstaller-hooks-contrib 的 hook-onnxruntime 会收 onnxruntime/ 下的动态库,
+    正常情况下已包含 capi/DirectML.dll;万一漏收,打包版会静默回退 CPU
+    (表现就是"装了 GPU 包但抠图还是慢"),所以这里显式补一次。
+    """
+    try:
+        import onnxruntime
+    except Exception:
+        return []
+    dll = os.path.join(os.path.dirname(onnxruntime.__file__), 'capi', 'DirectML.dll')
+    if not os.path.isfile(dll):
+        return []
+    if any(os.path.basename(b[0]).lower() == 'directml.dll' for b in a.binaries):
+        return []
+    return [(dll, 'onnxruntime/capi')]
+
+
+a.binaries += directml_binaries()
 
 pyz = PYZ(a.pure)
 
