@@ -12,7 +12,22 @@ __all__ = ["process_batch"]
 
 
 # ---------- 抠图(懒加载 rembg,首次调用才下载/加载模型) ----------
-_session = None
+# 模型可选:同一个 session 按模型名缓存。默认 isnet-general-use——对扁平卡通素材、
+# 带深色底的图集比 birefnet-general 干净(birefnet 会把整块深色底判成前景)。
+MODELS = {
+    "isnet-general-use": "通用(ISNet)",
+    "u2net": "经典(U2Net)",
+    "birefnet-general": "人像精细(BiRefNet)",
+}
+DEFAULT_MODEL = "isnet-general-use"
+# 超过该像素数关闭 alpha_matting(pymatting 内存开销随像素数增长)
+MAX_MATTING_PIXELS = 3_000_000
+# 与原 run.py 一致的边缘参数
+ALPHA_MATTING_FOREGROUND = 230
+ALPHA_MATTING_BACKGROUND = 20
+ALPHA_MATTING_ERODE = 5
+
+_sessions = {}
 _remove_fn = None
 
 _MODEL_NAME = "birefnet-general"
@@ -67,19 +82,31 @@ def _ensure_model(log=None):
         log("⏳ 下载完成")
 
 
-def matting(img, log=None):
-    """用 BiRefNet 去除背景,返回新 RGBA 图。"""
-    global _session, _remove_fn
-    if _session is None:
-        _ensure_model(log)
+def matting(img, model=DEFAULT_MODEL, log=None):
+    """去除背景,返回新 RGBA 图。model 取 MODELS 里的键。"""
+    global _remove_fn
+    if model not in MODELS:
+        raise ValueError(f"未知模型: {model!r},可选 {tuple(MODELS)}")
+    if model not in _sessions:
+        if model == _MODEL_NAME:
+            _ensure_model(log)  # 包内自带 birefnet,读一遍并按块打进度
         from rembg import remove, new_session
-        _remove_fn = remove  # 必须缓存到全局,否则第二次调用 remove 是未绑定局部变量
-        _session = new_session("birefnet-general")
+        _remove_fn = remove  # 缓存到全局,避免每次 import
+        if log:
+            log(f"  加载模型 {MODELS[model]}…")
+        _sessions[model] = new_session(model)
     if log:
-        log("  抠图中…(CPU 处理较慢,每张约 1 分钟)")
-    # ponytail: 关闭 alpha_matting——pymatting 后处理在大图上极慢(1024² 卡 3 分钟+),
-    # 抠图对边缘 alpha 要求低,关闭后约 19s 完成且质量可接受;需发丝级精细边缘时再开启。
-    return _remove_fn(img, session=_session)
+        log("  抠图中…")
+    # 与原 run.py 相同的边缘参数:小图(≤3M 像素)启用 alpha_matting 细化边缘
+    use_matting = img.size[0] * img.size[1] <= MAX_MATTING_PIXELS
+    return _remove_fn(
+        img,
+        session=_sessions[model],
+        alpha_matting=use_matting,
+        alpha_matting_foreground_threshold=ALPHA_MATTING_FOREGROUND,
+        alpha_matting_background_threshold=ALPHA_MATTING_BACKGROUND,
+        alpha_matting_erode_size=ALPHA_MATTING_ERODE,
+    )
 
 
 def is_transparent(img):
@@ -90,9 +117,10 @@ def is_transparent(img):
 
 
 # ---------- 主流程 ----------
-def process_batch(paths, out_dir, log=print, progress=None):
+def process_batch(paths, out_dir, model=DEFAULT_MODEL, log=print, progress=None):
     """逐张:抠图 → 保存透明背景 PNG 到 out_dir(原名)。已透明图片跳过。
 
+    model: MODELS 的键,默认 isnet-general-use。
     progress(done, total) 每处理完一张回调一次。
     """
     os.makedirs(out_dir, exist_ok=True)
@@ -108,7 +136,7 @@ def process_batch(paths, out_dir, log=print, progress=None):
             if is_transparent(img):
                 log("  跳过(已是透明背景)")
                 continue
-            img = matting(img, log=log)  # 模型加载进度 + 抠图提示在 matting 内输出
+            img = matting(img, model=model, log=log)  # 模型加载进度 + 抠图提示在 matting 内输出
             save_path = os.path.join(out_dir, base + ".png")
             img.save(save_path, "PNG")
             log(f"  → {os.path.basename(save_path)}")

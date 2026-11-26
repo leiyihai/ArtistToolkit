@@ -29,6 +29,7 @@ if _models_dir and os.path.exists(os.path.join(_models_dir, "birefnet-general.on
 
 from tools.icon_export.core import process_batch as icon_process, selftest as icon_selftest
 from tools.ai_matting.core import process_batch as matting_process, selftest as matting_selftest
+from tools.ai_matting.core import DEFAULT_MODEL as matting_default_model
 from tools.image_resize.core import process as resize_process, selftest as resize_selftest
 from tools.unmult.core import process_batch as unmult_process, selftest as unmult_selftest
 from tools.img2box.core import process as img2box_process, selftest as img2box_selftest
@@ -122,6 +123,7 @@ def main():
             elif cmd == "matting_process":
                 threading.Thread(target=run_job, args=(out, rid, lambda req=req, rid=rid: matting_process(
                     req["paths"], req["out"],
+                    model=req.get("model") or matting_default_model,
                     log=lambda m: emit(out, rid, event="log", message=m),
                     progress=lambda d, t: emit(out, rid, event="progress", done=d, total=t),
                 )), daemon=True).start()

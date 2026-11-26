@@ -12,9 +12,17 @@ use serde_json::json;
 use crate::thumbs::ThumbCache;
 use crate::{Shell, theme, widgets};
 
+/// 可选模型(与 tools/ai_matting/core.py 的 MODELS 对应)。
+pub const MODELS: [(&str, &str); 3] = [
+    ("isnet-general-use", "通用(ISNet)"),
+    ("u2net", "经典(U2Net)"),
+    ("birefnet-general", "人像精细(BiRefNet)"),
+];
+
 pub struct AiMattingState {
     pub paths: Vec<PathBuf>,
     pub out_dir: String,
+    pub model: &'static str,
     pub running: bool,
     pub progress: (u64, u64),
     pub logs: Vec<String>,
@@ -48,6 +56,7 @@ impl Default for AiMattingState {
             thumbs,
             paths,
             out_dir,
+            model: MODELS[0].0,
             running: false,
             progress: (0, 0),
             logs: Vec::new(),
@@ -98,6 +107,21 @@ impl Shell {
             .cloned()
             .collect();
         let out_dir = self.matting.out_dir.clone();
+        let current_model = self.matting.model;
+        let mut model_row = widgets::seg_container();
+        for (index, (key, label)) in MODELS.iter().enumerate() {
+            let key = *key;
+            model_row = model_row.child(widgets::seg_item(
+                ("matting-model", index),
+                *label,
+                current_model == key,
+                !running,
+                cx.listener(move |this, _, _, cx| {
+                    this.matting.model = key;
+                    cx.notify();
+                }),
+            ));
+        }
 
         v_flex()
             .size_full()
@@ -157,8 +181,15 @@ impl Shell {
             .child(
                 widgets::card()
                     .child(widgets::card_title("2 · 输出设置"))
+                    .child(widgets::field("模型").child(model_row).child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(theme::muted())
+                            .child("卡通/图集用通用更干净;人像选精细,较慢"),
+                    ))
                     .child(
                         widgets::field("输出路径")
+                            .mt(px(12.))
                             .child(
                                 div()
                                     .flex_1()
@@ -251,7 +282,8 @@ impl Shell {
         );
         self.matting.running = true;
         self.matting.progress = (0, count as u64);
-        self.matting.push_log(format!("开始抠图 {count} 张…"));
+        let label = MODELS.iter().find(|(key, _)| *key == self.matting.model).map(|(_, label)| *label).unwrap_or("");
+        self.matting.push_log(format!("开始抠图 {count} 张({label})…"));
         cx.notify();
     }
 }
