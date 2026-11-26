@@ -1,4 +1,4 @@
-# 启动 GPUI 应用 → 移到副屏 → 置顶 → 截该屏(可裁剪窗口)→ 退出。
+﻿# 启动 GPUI 应用 → 移到副屏 → 置顶 → 截该屏(可裁剪窗口)→ 退出。
 # 默认在非主屏上操作,避免打断主屏工作。
 # 用法: powershell -File ui\scripts\screenshot.ps1 [-Out _shot.png] [-Wait 8] [-Monitor 1] [-Crop]
 param(
@@ -40,6 +40,8 @@ if ($Attach) {
 } else {
     # 让应用直接开在目标屏,避免在主屏闪一下
     $env:ATK_UI_WINDOW_POS = "{0},{1},{2},{3}" -f ($screen.WorkingArea.X + 40), ($screen.WorkingArea.Y + 20), 1264, 861
+    # 跑源码构建时强制用 python backend.py,避免验证到 dist\ 里的旧打包后端
+    if ($Exe -match "ui\\target\\") { $env:ATK_BACKEND = "python" }
     # debug 构建是 console 子系统:CreateNoWindow 只压掉控制台,应用窗口照常显示
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = (Resolve-Path $Exe).Path

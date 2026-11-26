@@ -3,6 +3,7 @@
 ![图集拆分页](docs/screenshot-icon.png)
 ![AI 图集命名](docs/screenshot-icon-ai.png)
 ![智能抠图页](docs/screenshot-matting.png)
+![抠图模型对比:上=旧打包版(BiRefNet),下=当前默认(ISNet)](docs/matting-compare.png)
 ![快捷尺寸页](docs/screenshot-resize.png)
 ![天空盒烘焙页](docs/screenshot-img2box.png)
 ![特效抠图页](docs/screenshot.png)
@@ -32,7 +33,7 @@
 | 页签 | 状态 | 后端命令 |
 | --- | --- | --- |
 | 图集拆分 | ✅ 拖拽/选图/裁切类型/尺寸/圆角/统一大小/日志 | `icon_process` |
-| 智能抠图 | ✅ 拖拽/选图/模型选择(ISNet/U2Net/BiRefNet)/输出目录/日志 | `matting_process` |
+| 智能抠图 | ✅ 拖拽/选图/**模型选择**(通用 ISNet / 经典 U2Net / 人像精细 BiRefNet)/输出目录/日志 | `matting_process` |
 | 快捷尺寸 | ✅ 拖拽文件夹/输入输出目录/预设与自定义尺寸/等比/取消 | `resize_process`、`resize_cancel` |
 | 特效抠图 | ✅ 拖拽/选图/背景模式/去边/重建 Alpha/跳过已存在 | `unmult_process` |
 | 天空盒烘焙 | ✅ 拖拽 HDRI/Blender 自动探测/烘焙/预览 | `img2box_process`、`img2box_find_blender`、`img2box_preview` |

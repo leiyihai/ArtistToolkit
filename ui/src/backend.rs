@@ -23,14 +23,24 @@ impl Backend {
     pub fn spawn(root: &Path) -> std::io::Result<(Self, smol::channel::Receiver<String>)> {
         let exe = root.join("dist").join("ArtistToolkit-backend.exe");
         let bundled = root.join("ArtistToolkit-backend.exe");
-        let (cmd, _kind) = if bundled.is_file() {
-            (Command::new(&bundled), "bundled")
-        } else if exe.is_file() {
-            (Command::new(&exe), "packaged")
-        } else {
-            let mut cmd = Command::new("python");
-            cmd.arg("backend.py");
-            (cmd, "python")
+        // ATK_BACKEND=python 强制用源码跑(改完 Python 后验证用),也可给一个 exe 路径。
+        let forced = std::env::var("ATK_BACKEND").ok();
+        let (cmd, _kind) = match forced.as_deref() {
+            Some("python") => {
+                let mut cmd = Command::new("python");
+                cmd.arg("backend.py");
+                (cmd, "python")
+            }
+            Some(path) if !path.is_empty() && std::path::Path::new(path).is_file() => {
+                (Command::new(path), "forced")
+            }
+            _ if bundled.is_file() => (Command::new(&bundled), "bundled"),
+            _ if exe.is_file() => (Command::new(&exe), "packaged"),
+            _ => {
+                let mut cmd = Command::new("python");
+                cmd.arg("backend.py");
+                (cmd, "python")
+            }
         };
         let mut cmd = cmd;
         // Windows:不要给后端弹出控制台窗口(stdio 走管道,不需要 console)。
