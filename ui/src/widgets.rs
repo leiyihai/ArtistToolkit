@@ -243,6 +243,8 @@ pub fn log_panel(lines: Vec<String>) -> Div {
     let mut body = v_flex()
         .w_full()
         .h(px(90.))
+        .justify_end()
+        .overflow_hidden()
         .p(px(10.))
         .gap(px(2.))
         .rounded(px(theme::RADIUS))

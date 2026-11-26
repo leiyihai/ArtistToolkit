@@ -66,6 +66,15 @@ pub struct AiNamingState {
     pub logs: Vec<String>,
 }
 
+impl AiNamingState {
+    pub fn push_log(&mut self, text: impl Into<String>) {
+        self.logs.push(text.into());
+        if self.logs.len() > 300 {
+            self.logs.drain(0..self.logs.len() - 300);
+        }
+    }
+}
+
 pub const SIZES: [u32; 4] = [32, 64, 128, 256];
 
 pub struct IconExportState {
@@ -648,7 +657,7 @@ impl Shell {
         let named = self.icon.ai.named_dir.clone();
         let out = self.icon.ai.out_dir.clone();
         if clean.is_empty() || named.is_empty() || out.is_empty() {
-            self.icon.ai.logs.push("请填写三个文件夹路径。".to_string());
+            self.icon.ai.push_log("请填写三个文件夹路径。");
             cx.notify();
             return;
         }
@@ -659,7 +668,7 @@ impl Shell {
             .map(|(size, _)| *size)
             .collect();
         if sizes.is_empty() {
-            self.icon.ai.logs.push("请至少选择一个输出尺寸。".to_string());
+            self.icon.ai.push_log("请至少选择一个输出尺寸。");
             cx.notify();
             return;
         }
@@ -677,7 +686,7 @@ impl Shell {
         }
         self.send_job(crate::JobKind::IconAi, "icon_ai_process", payload);
         self.icon.ai.running = true;
-        self.icon.ai.logs.push("开始 AI 图集命名…".to_string());
+        self.icon.ai.push_log("开始 AI 图集命名…");
         cx.notify();
     }
     pub(crate) fn icon_pick_images(&mut self, cx: &mut Context<Self>) {

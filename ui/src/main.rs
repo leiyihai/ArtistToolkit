@@ -289,7 +289,7 @@ impl Shell {
         match kind {
             JobKind::Unmult => self.unmult.push_log(text),
             JobKind::IconExport => self.icon.push_log(text),
-            JobKind::IconAi => self.icon.ai.logs.push(text.into()),
+            JobKind::IconAi => self.icon.ai.push_log(text),
             JobKind::Matting => self.matting.push_log(text),
             JobKind::Resize => self.resize.push_log(text),
             JobKind::Img2Box => self.img2box.push_log(text),
