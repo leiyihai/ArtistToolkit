@@ -102,14 +102,31 @@ def test_refine_falls_back_when_solver_fails():
 
 
 def test_finish_hardens_interior():
-    """图标内部偏白的区域常被模型判成半透明;finish 应把内部填实,边缘保持渐变。"""
+    """图标内部半透明的区域应填实;关掉收边时边缘保持渐变。"""
     img = Image.new("RGBA", (96, 96), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
-    draw.rectangle((18, 18, 78, 78), fill=(255, 255, 255, 200))  # 内部偏白且只有 200
+    draw.rectangle((18, 18, 78, 78), fill=(40, 110, 60, 200))  # 内部只有 200
     out = matting_refine.finish(img)
     alpha = np.asarray(out)[..., 3]
     assert alpha[48, 48] == 255, f"内部应填实,实际 {alpha[48, 48]}"
-    assert alpha[18, 48] == 200, f"边缘应保持渐变,实际 {alpha[18, 48]}"
+
+    soft = np.asarray(matting_refine.finish(img, edge_contrast=False))[..., 3]
+    assert soft[48, 48] == 255, "内部仍应填实"
+    assert soft[18, 48] == 200, f"关掉收边后边缘应保持渐变,实际 {soft[18, 48]}"
+
+
+def test_finish_narrows_edges_on_uniform_background():
+    """纯色背景的素材图,边缘应收窄成 1px 过渡(手抠的观感)。"""
+    img = Image.new("RGBA", (96, 96), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+    for i, alpha in enumerate(range(20, 256, 20)):
+        draw.rectangle((20 + i, 20 + i, 76 - i, 76 - i), fill=(40, 110, 60, alpha))
+    before = np.asarray(img)[..., 3].astype(np.int16)
+    after = np.asarray(matting_refine.finish(img))[..., 3].astype(np.int16)
+    semi_before = int(((before > 16) & (before < 240)).sum())
+    semi_after = int(((after > 16) & (after < 240)).sum())
+    assert semi_after < semi_before / 2, (semi_before, semi_after)
+    assert after[48, 48] == 255, "主体中心仍应不透明"
 
 
 def test_finish_bleeds_foreground_color():
@@ -129,6 +146,48 @@ def test_finish_empty_image():
     img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
     out = matting_refine.finish(img)
     assert np.asarray(out)[..., 3].max() == 0
+
+
+def test_finish_trims_fringe_on_uniform_background():
+    """纯色背景下,轮廓外的半透明背景色应被压成透明。"""
+    img = Image.new("RGBA", (96, 96), (252, 252, 252, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((28, 28, 68, 68), fill=(30, 120, 60, 255))
+    # 轮廓外一圈白背景的半透明像素(模型掩膜常见的"灰白毛边")
+    for i in range(4):
+        draw.rectangle((28 - i - 1, 28 - i - 1, 68 + i + 1, 68 + i + 1), outline=(252, 252, 252, 60))
+    before = np.asarray(img)[..., 3].astype(np.int16)
+    out = matting_refine.finish(img)
+    after = np.asarray(out)[..., 3].astype(np.int16)
+    assert before[26, 48] > 40, "构造失败:边缘应有半透明像素"
+    assert after[26, 48] < 10, f"背景色毛边应被压掉,实际 {after[26, 48]}"
+    assert after[48, 48] == 255, "主体不受影响"
+
+
+def test_finish_keeps_white_detail_on_white_background():
+    """白底上的白色高光不能因为"像背景"被删掉。"""
+    img = Image.new("RGBA", (96, 96), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((20, 20, 76, 76), fill=(30, 120, 60, 255))
+    draw.rectangle((40, 40, 56, 56), fill=(255, 255, 255, 255))  # 内部纯白
+    out = matting_refine.finish(img)
+    alpha = np.asarray(out)[..., 3]
+    assert alpha[48, 48] == 255, f"内部白色高光应保留,实际 {alpha[48, 48]}"
+
+
+def test_finish_skips_trim_on_busy_background():
+    """背景不纯(照片类)时不做颜色去边,避免误删主体。"""
+    rng = np.random.default_rng(0)
+    busy = rng.integers(0, 255, (96, 96, 3), dtype=np.uint8)
+    alpha = np.full((96, 96, 1), 120, dtype=np.uint8)
+    img = Image.fromarray(np.concatenate([busy, alpha], axis=-1), "RGBA")
+
+    background, spread = matting_refine.background_color(busy)
+    assert background is None, f"噪声背景应判定为没有纯色背景,实际 spread={spread}"
+
+    before = np.asarray(img)[..., 3].copy()
+    out = matting_refine.finish(img, harden_px=0, bleed_px=0)
+    assert np.array_equal(before, np.asarray(out)[..., 3]), "背景不纯时不应改动 alpha"
 
 
 if __name__ == "__main__":

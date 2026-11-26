@@ -22,7 +22,7 @@ import os
 import numpy as np
 from PIL import Image
 
-__all__ = ["matting_enabled", "refine_cutout", "finish", "rtol"]
+__all__ = ["matting_enabled", "refine_cutout", "finish", "background_color", "trim_background_fringe", "rtol"]
 
 _FALSE = {"0", "off", "false", "no", "none"}
 _TRUE = {"1", "on", "true", "yes"}
@@ -95,21 +95,64 @@ def _refine(img, mask, foreground_threshold, background_threshold, erode_size, t
     return Image.fromarray(cutout)
 
 
-def finish(rgba, harden_px=3, bleed_px=3):
-    """收尾两步,都是纯像素操作、几十毫秒:
+def background_color(rgb, band=8, max_spread=16.0):
+    """从图像四周估一个纯色背景;背景不够纯时返回 None(照片类图不参与去边)。
 
-    1. 内部填实:离透明区超过 harden_px 的前景像素一律 alpha=255。
+    返回 (背景色, 95 分位偏差)。偏差超过 max_spread 视为"没有纯色背景"。
+    """
+    border = np.concatenate(
+        [
+            rgb[:band].reshape(-1, 3),
+            rgb[-band:].reshape(-1, 3),
+            rgb[:, :band].reshape(-1, 3),
+            rgb[:, -band:].reshape(-1, 3),
+        ]
+    ).astype(np.float32)
+    median = np.median(border, axis=0)
+    spread = float(np.percentile(np.abs(border - median).max(axis=1), 95))
+    if spread > max_spread:
+        return None, spread
+    return median, spread
+
+
+def trim_background_fringe(alpha, rgb, background, edge_width=25.0, low=5 / 255, high=242 / 255):
+    """把过渡带里"看起来就是背景色"的半透明像素压掉。
+
+    模型掩膜会把轮廓外的背景带进 0.1~0.9 的 alpha,叠在深色底上就是灰白毛边/灰雾。
+    纯色背景下可以直接用颜色判断:越接近背景色,越应该透掉。alpha 已经接近 1 的前景
+    (图标内部的白色高光、白十字等)不在过渡带内,不会被误伤。
+    """
+    distance = np.abs(rgb.astype(np.float32) - np.asarray(background, dtype=np.float32)).max(axis=-1)
+    factor = np.clip(distance / edge_width, 0.0, 1.0)
+    band = (alpha > low * 255) & (alpha < high * 255)
+    return np.where(band, alpha * factor, alpha).astype(np.uint8)
+
+
+def finish(rgba, harden_px=3, bleed_px=3, trim=True, edge_contrast=True):
+    """收尾三步,都是纯像素操作,2048² 约 0.4 s:
+
+    1. 背景去边:纯色背景下,过渡带里近似背景色的半透明像素压成透明,
+       去掉模型掩膜带出来的白/灰毛边(背景不够纯时自动跳过)。
+    2. 内部填实:离透明区超过 harden_px 的前景像素一律 alpha=255。
        模型掩膜在图标内部偏白/偏亮处常给出 230~250,不填实就会"漏出"底色,
        看起来像是这些白块被抠掉了。
-    2. 颜色外扩:把前景颜色向外扩散到半透明/透明区,替换那里残留的背景色。
-       否则结果缩放(界面缩略图、导出小尺寸)时会把背景白拉进边缘,形成白毛边。
-
-    只改 RGB 中 alpha 很低的部分,可见像素保持原样。
+    3. 颜色外扩:把前景颜色向外扩散到透明区,替换那里残留的背景色,
+       否则结果缩放(界面缩略图、导出小尺寸)时会把背景色拉进边缘。
     """
     from scipy.ndimage import binary_erosion, distance_transform_edt
 
     arr = np.asarray(rgba).astype(np.uint8).copy()
     alpha = arr[..., 3]
+
+    if trim:
+        background, _spread = background_color(arr[..., :3])
+        if background is not None:
+            alpha = trim_background_fringe(alpha, arr[..., :3], background)
+            # 纯色背景通常意味着"素材图",边缘按手抠的习惯收窄成 1px 过渡
+            if edge_contrast:
+                alpha = np.clip((alpha.astype(np.float32) / 255.0 - 0.35) / 0.30, 0, 1) * 255
+                alpha = alpha.astype(np.uint8)
+            arr[..., 3] = alpha
 
     if harden_px > 0 and (alpha > 8).any():
         # 3×3 腐蚀 N 次 ≈ 离透明区 N 像素,比精确距离变换快 4 倍多
