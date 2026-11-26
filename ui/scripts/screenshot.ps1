@@ -1,10 +1,11 @@
-﻿# 启动 GPUI 应用 → 置顶 → 截屏 → 退出。用于验证界面改动的渲染结果。
+# 启动 GPUI 应用 → 置顶 → 截屏 → 退出。用于验证界面改动的渲染结果。
 # 用法: powershell -File ui\scripts\screenshot.ps1 [-Out E:\ArtistToolkit\ui\_shot.png] [-Wait 8]
 param(
     [string]$Exe = (Join-Path $PSScriptRoot '..\target\debug\artist-toolkit-ui.exe'),
     [string]$Out = (Join-Path $PSScriptRoot '..\_shot.png'),
     [int]$Wait = 8,
-    [switch]$ReportChildren
+    [switch]$ReportChildren,
+    [switch]$Attach
 )
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -18,7 +19,12 @@ public class WindowTools {
 }
 "@
 
-$process = Start-Process -FilePath $Exe -PassThru
+if ($Attach) {
+    $process = Get-Process | Where-Object { $_.MainWindowTitle -eq 'Artist Toolkit' } | Select-Object -First 1
+    if (-not $process) { Write-Error '没有正在运行的 Artist Toolkit 窗口'; exit 1 }
+} else {
+    $process = Start-Process -FilePath $Exe -PassThru
+}
 Start-Sleep -Seconds $Wait
 $process.Refresh()
 $handle = $process.MainWindowHandle
@@ -42,5 +48,5 @@ $bitmap.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
 
-if (-not $process.HasExited) { $process.Kill() }
+if (-not $Attach -and -not $process.HasExited) { $process.Kill() }
 Write-Output "saved $Out ($($bounds.Width)x$($bounds.Height))"

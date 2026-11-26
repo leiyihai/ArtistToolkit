@@ -233,16 +233,16 @@ impl Shell {
                 None => self.img2box.push_log("拖入的内容里没有图片。"),
             },
             Tab::Unmult => {
-                let added = append_images(&mut self.unmult.paths, images);
-                self.unmult.push_log(format!("拖入 {added} 张图片"));
+                let text = append_drop_images(&mut self.unmult.paths, images, "PNG / JPG / TIFF / WebP");
+                self.unmult.push_log(text);
             }
             Tab::IconExport => {
-                let added = append_images(&mut self.icon.paths, images);
-                self.icon.push_log(format!("拖入 {added} 张图片"));
+                let text = append_drop_images(&mut self.icon.paths, images, "PNG / JPG / WebP");
+                self.icon.push_log(text);
             }
             Tab::AiMatting => {
-                let added = append_images(&mut self.matting.paths, images);
-                self.matting.push_log(format!("拖入 {added} 张图片"));
+                let text = append_drop_images(&mut self.matting.paths, images, "PNG / JPG / WebP");
+                self.matting.push_log(text);
             }
         }
         cx.notify();
@@ -485,22 +485,58 @@ fn is_image(path: &Path) -> bool {
     )
 }
 
-/// 追加图片路径,按小写全路径去重;返回新增数量。
-fn append_images(existing: &mut Vec<PathBuf>, images: Vec<PathBuf>) -> usize {
+/// 追加图片路径,按小写全路径去重;返回真正新增的路径。
+fn append_images(existing: &mut Vec<PathBuf>, images: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut seen: Vec<String> = existing
         .iter()
         .map(|path| path.to_string_lossy().to_lowercase())
         .collect();
-    let before = existing.len();
+    let mut added = Vec::new();
     for path in images {
         let key = path.to_string_lossy().to_lowercase();
         if seen.contains(&key) {
             continue;
         }
         seen.push(key);
-        existing.push(path);
+        existing.push(path.clone());
+        added.push(path);
     }
-    existing.len() - before
+    added
+}
+
+/// 追加图片路径,返回写进日志的一句中文描述(只列出真正新增的文件)。
+fn append_drop_images(existing: &mut Vec<PathBuf>, images: Vec<PathBuf>, kinds: &str) -> String {
+    let dropped = images.len();
+    let added = append_images(existing, images);
+    if dropped == 0 {
+        return format!("拖入的内容里没有支持的图片({kinds})");
+    }
+    if added.is_empty() {
+        return format!("拖入的 {dropped} 个文件都已在列表中");
+    }
+    let names: Vec<String> = added
+        .iter()
+        .take(3)
+        .map(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.display().to_string())
+        })
+        .collect();
+    let suffix = if added.len() > 3 { " 等" } else { "" };
+    let skipped = dropped - added.len();
+    let skipped_note = if skipped > 0 {
+        format!(",跳过 {skipped} 个重复/不支持的文件")
+    } else {
+        String::new()
+    };
+    format!(
+        "拖入 {} 张图片:{}{}{skipped_note},共 {} 张待处理",
+        added.len(),
+        names.join("、"),
+        suffix,
+        existing.len()
+    )
 }
 fn main() {
     let app = gpui_kit::application().with_assets(Assets);
