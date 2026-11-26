@@ -55,6 +55,7 @@ pub enum IconMode {
 
 /// 「AI 图集命名」模式的状态(`aiState`)。
 pub struct AiNamingState {
+    pub model: &'static str,
     pub clean_dir: String,
     pub named_dir: String,
     pub out_dir: String,
@@ -77,6 +78,13 @@ impl AiNamingState {
 
 pub const SIZES: [u32; 4] = [32, 64, 128, 256];
 
+/// 可选模型(与 tools/icon_export/core.py 的 MODELS 对应)。
+pub const MODELS: [(&str, &str); 3] = [
+    ("isnet-general-use", "通用(ISNet)"),
+    ("u2net", "经典(U2Net)"),
+    ("birefnet-general", "人像精细(BiRefNet)"),
+];
+
 pub struct IconExportState {
     pub paths: Vec<PathBuf>,
     pub out_dir: String,
@@ -89,6 +97,7 @@ pub struct IconExportState {
     pub logs: Vec<String>,
     pub thumbs: ThumbCache,
     pub mode: IconMode,
+    pub model: &'static str,
     pub ai: AiNamingState,
 }
 
@@ -126,6 +135,7 @@ impl IconExportState {
         let mut ai_sizes = [false; 4];
         ai_sizes[2] = true;
         let ai = AiNamingState {
+            model: MODELS[0].0,
             clean_dir: String::new(),
             named_dir: String::new(),
             out_dir: out_dir.clone(),
@@ -151,6 +161,7 @@ impl IconExportState {
         };
         Self {
             mode,
+            model: MODELS[0].0,
             ai,
             thumbs: ThumbCache::new(&paths),
             paths,
@@ -258,6 +269,21 @@ impl Shell {
 
         let out_dir = self.icon.out_dir.clone();
         let normalize = self.icon.normalize;
+        let current_model = self.icon.model;
+        let mut model_row = widgets::seg_container();
+        for (index, (key, label)) in MODELS.iter().enumerate() {
+            let key = *key;
+            model_row = model_row.child(widgets::seg_item(
+                ("icon-model", index),
+                *label,
+                current_model == key,
+                !running,
+                cx.listener(move |this, _, _, cx| {
+                    this.icon.model = key;
+                    cx.notify();
+                }),
+            ));
+        }
 
         v_flex()
             .size_full()
@@ -344,6 +370,12 @@ impl Shell {
                             ),
                     )
                     .child(widgets::field("输出尺寸").mt(px(12.)).child(size_row))
+                    .child(widgets::field("模型").mt(px(12.)).child(model_row).child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(theme::muted())
+                            .child("卡通/图集用通用更干净"),
+                    ))
                     .child(
                         widgets::field("输出路径")
                             .mt(px(12.))
@@ -480,6 +512,21 @@ impl Shell {
         }
 
         let normalize = self.icon.ai.normalize;
+        let current_ai_model = self.icon.ai.model;
+        let mut ai_model_row = widgets::seg_container();
+        for (index, (key, label)) in MODELS.iter().enumerate() {
+            let key = *key;
+            ai_model_row = ai_model_row.child(widgets::seg_item(
+                ("ai-model", index),
+                *label,
+                current_ai_model == key,
+                !running,
+                cx.listener(move |this, _, _, cx| {
+                    this.icon.ai.model = key;
+                    cx.notify();
+                }),
+            ));
+        }
 
         v_flex()
             .size_full()
@@ -550,6 +597,7 @@ impl Shell {
                                     ),
                             )
                             .child(widgets::field("输出尺寸").pl(px(116.)).child(size_row))
+                            .child(widgets::field("模型").pl(px(116.)).child(ai_model_row))
                             .child(
                                 h_flex()
                                     .pl(px(190.))
@@ -679,6 +727,7 @@ impl Shell {
             "crop": self.icon.ai.crop.key(),
             "sizes": sizes,
             "normalize": self.icon.ai.normalize,
+            "model": self.icon.ai.model,
         });
         if self.icon.ai.crop == Crop::RoundedSquare {
             let corner = self.icon.ai.corner.read(cx).value().start();
@@ -749,6 +798,7 @@ impl Shell {
             "sizes": sizes,
             "out": self.icon.out_dir,
             "normalize": self.icon.normalize,
+            "model": self.icon.model,
         });
         if self.icon.crop == Crop::RoundedSquare {
             let corner = self.icon.corner.read(cx).value().start();

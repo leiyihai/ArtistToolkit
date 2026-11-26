@@ -28,6 +28,7 @@ if _models_dir and os.path.exists(os.path.join(_models_dir, "birefnet-general.on
     os.environ.setdefault("U2NET_HOME", _models_dir)
 
 from tools.icon_export.core import process_batch as icon_process, selftest as icon_selftest
+from tools.icon_export.core import DEFAULT_MODEL as icon_default_model
 from tools.ai_matting.core import process_batch as matting_process, selftest as matting_selftest
 from tools.ai_matting.core import DEFAULT_MODEL as matting_default_model
 from tools.image_resize.core import process as resize_process, selftest as resize_selftest
@@ -101,6 +102,7 @@ def main():
                     normalize=req.get("normalize", False),
                     corner_ratio=req.get("corner_ratio"),
                     ai_rename=req.get("ai_rename", False),
+                    model=req.get("model") or icon_default_model,
                     log=lambda m: emit(out, rid, event="log", message=m),
                 )), daemon=True).start()
             elif cmd == "icon_ai_process":
@@ -117,6 +119,7 @@ def main():
                     normalize=req.get("normalize", False),
                     corner_ratio=req.get("corner_ratio"),
                     ai_rename=True,
+                    model=req.get("model") or icon_default_model,
                     ai_source_paths=named_paths,
                     log=lambda m: emit(out, rid, event="log", message=m),
                 )), daemon=True).start()
