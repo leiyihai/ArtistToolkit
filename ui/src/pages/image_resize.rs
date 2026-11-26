@@ -136,6 +136,10 @@ impl Shell {
             .size_full()
             .min_h_0()
             .gap(px(16.))
+            .id("resize-page")
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                this.accept_drop(crate::Tab::ImageResize, paths.0.to_vec(), cx)
+            }))
             .child(
                 widgets::card()
                     .child(widgets::card_title("1 · 输入文件夹"))
@@ -146,14 +150,9 @@ impl Shell {
                             self.drag_over,
                         )
                             .on_click(cx.listener(|this, _, _, cx| this.resize_pick_dir(true, cx)))
-                        .on_drag_move(cx.listener(
-                            |this, _: &DragMoveEvent<ExternalPaths>, _, cx| {
-                                if !this.drag_over {
-                                    this.drag_over = true;
-                                    cx.notify();
-                                }
-                            },
-                        ))
+                        .on_drag_move(cx.listener(|this, _: &DragMoveEvent<ExternalPaths>, _, cx| {
+                            this.note_drag_hover(cx);
+                        }))
                         .on_file_drop_exit(cx.listener(|this, _, _, cx| {
                             this.drag_over = false;
                             cx.notify();

@@ -103,6 +103,9 @@ pub struct Shell {
     pub status: String,
     /// 文件正被拖到窗口里(用于 dropzone 高亮)。
     pub drag_over: bool,
+    /// 高亮清理任务是否在跑,以及最后一次拖拽移动的时间。
+    drag_watch: bool,
+    last_drag_move: std::time::Instant,
 }
 
 impl Shell {
@@ -137,6 +140,8 @@ impl Shell {
             ping_id: None,
             status: "后端连接中…".to_string(),
             drag_over: false,
+            drag_watch: false,
+            last_drag_move: std::time::Instant::now(),
         };
         shell.ping_id = Some(shell.backend.request("ping", serde_json::json!({})));
         // 滑杆自身不驱动重绘:订阅变更后通知界面刷新。
@@ -192,6 +197,40 @@ impl Shell {
             .detach();
         }
         shell
+    }
+
+
+    /// 拖拽经过 dropzone 时点亮高亮,并在 400ms 没有新移动后自动复位
+    /// (不依赖 `FileDropEvent::Exited`:它在 gpui 里不一定派发到元素)。
+    pub(crate) fn note_drag_hover(&mut self, cx: &mut Context<Self>) {
+        self.last_drag_move = std::time::Instant::now();
+        if self.drag_over {
+            return;
+        }
+        self.drag_over = true;
+        cx.notify();
+        if self.drag_watch {
+            return;
+        }
+        self.drag_watch = true;
+        cx.spawn(async move |this, cx| {
+            loop {
+                smol::Timer::after(std::time::Duration::from_millis(250)).await;
+                let mut finished = false;
+                let alive = this.update(cx, |shell, cx| {
+                    if shell.last_drag_move.elapsed() > std::time::Duration::from_millis(400) {
+                        shell.drag_over = false;
+                        shell.drag_watch = false;
+                        finished = true;
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() || finished {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     /// 接受一次文件拖放(来自 `on_drop`,或开发期 `ATK_UI_DROP`)。

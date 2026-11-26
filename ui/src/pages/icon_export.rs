@@ -254,6 +254,10 @@ impl Shell {
             .size_full()
             .min_h_0()
             .gap(px(16.))
+            .id("icon-page")
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                this.accept_drop(crate::Tab::IconExport, paths.0.to_vec(), cx)
+            }))
             .child(
                 widgets::card()
                     .child(widgets::card_title("1 · 添加图片"))
@@ -265,10 +269,7 @@ impl Shell {
                         )
                         .on_click(cx.listener(|this, _, _, cx| this.icon_pick_images(cx)))
                         .on_drag_move(cx.listener(|this, _: &DragMoveEvent<ExternalPaths>, _, cx| {
-                            if !this.drag_over {
-                                this.drag_over = true;
-                                cx.notify();
-                            }
+                            this.note_drag_hover(cx);
                         }))
                         .on_file_drop_exit(cx.listener(|this, _, _, cx| {
                             this.drag_over = false;
