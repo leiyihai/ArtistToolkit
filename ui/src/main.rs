@@ -6,12 +6,12 @@
 
 mod backend;
 mod pages;
+mod theme;
+mod widgets;
 
 use gpui_kit::assets::Assets;
-use gpui_kit::component::{
-    sidebar::{Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
-    *,
-};
+use gpui_kit::component::*;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use std::path::{Path, PathBuf};
@@ -401,37 +401,89 @@ impl Shell {
         id
     }
 
-    fn sidebar(&self, cx: &mut Context<Self>) -> Sidebar<SidebarGroup<SidebarMenu>> {
-        let items: Vec<SidebarMenuItem> = Tab::ALL
-            .iter()
-            .map(|tab| {
-                let tab = *tab;
-                SidebarMenuItem::new(tab.title())
-                    .icon(tab.icon())
-                    .active(self.tab == tab)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.tab = tab;
-                        cx.notify();
-                    }))
-            })
-            .collect();
-        Sidebar::new("tabs")
-            .w(px(220.))
-            .header(
-                SidebarHeader::new().child(
-                    v_flex()
-                        .gap_1()
-                        .child(div().font_bold().child("Artist Toolkit"))
-                        .child(div().text_xs().child("Rust · GPUI")),
-                ),
+    /// 侧边栏:白底 208px、品牌行 + 页签(`.nav-btn`,选中为珊瑚橙浅底)。
+    fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .w(px(theme::SIDEBAR_WIDTH))
+            .h_full()
+            .flex_none()
+            .bg(theme::panel())
+            .border_r_1()
+            .border_color(theme::border())
+            .child(
+                h_flex()
+                    .items_center()
+                    .gap(px(10.))
+                    .px(px(16.))
+                    .pt(px(18.))
+                    .pb(px(14.))
+                    .border_b_1()
+                    .border_color(theme::border())
+                    .child(
+                        div()
+                            .size(px(22.))
+                            .flex_none()
+                            .rounded_full()
+                            .bg(linear_gradient(
+                                135.0,
+                                linear_color_stop(theme::accent(), 0.0),
+                                linear_color_stop(rgb(0xf0b48f), 1.0),
+                            )),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child("Artist Toolkit"),
+                    ),
             )
-            .child(SidebarGroup::new("功能").child(SidebarMenu::new().children(items)))
-            .footer(SidebarFooter::new().child(
+            .child(
+                v_flex()
+                    .flex_1()
+                    .gap(px(2.))
+                    .px(px(8.))
+                    .py(px(10.))
+                    .children({
+                        let mut items = Vec::new();
+                        for tab in Tab::ALL {
+                            items.push(self.nav_item(tab, cx));
+                        }
+                        items
+                    }),
+            )
+            .child(
                 div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
+                    .px(px(16.))
+                    .py(px(10.))
+                    .text_size(px(11.))
+                    .text_color(theme::muted())
                     .child(self.status.clone()),
-            ))
+            )
+    }
+
+    /// 单个页签按钮(`.nav-btn`):左对齐文本、10px 圆角、悬停浅底、选中珊瑚橙浅底。
+    fn nav_item(&self, tab: Tab, cx: &mut Context<Self>) -> AnyElement {
+        let active = self.tab == tab;
+        div()
+            .id(("nav", tab as usize))
+            .w_full()
+            .px(px(14.))
+            .py(px(10.))
+            .rounded(px(theme::RADIUS))
+            .text_size(px(13.))
+            .text_color(if active { theme::text() } else { theme::muted() })
+            .when(active, |this| {
+                this.bg(theme::accent_dim())
+                    .font_weight(FontWeight::SEMIBOLD)
+            })
+            .when(!active, |this| this.hover(|this| this.bg(theme::panel_2())))
+            .cursor_pointer()
+            .child(tab.title())
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.tab = tab;
+                cx.notify();
+            }))
+            .into_any_element()
     }
 }
 
@@ -446,31 +498,37 @@ impl Render for Shell {
         };
         h_flex()
             .size_full()
-            .bg(cx.theme().background)
-            .text_color(cx.theme().foreground)
+            .bg(theme::bg())
+            .text_color(theme::text())
             .child(self.sidebar(cx))
             .child(
                 v_flex()
+                    .id("content-scroll")
                     .flex_1()
                     .min_w_0()
+                    .min_h_0()
                     .h_full()
+                    .overflow_y_scroll()
+                    .px(px(theme::CONTENT_PAD_X))
+                    .py(px(theme::CONTENT_PAD_Y))
+                    .gap(px(16.))
                     .child(
-                        h_flex()
-                            .items_center()
-                            .gap_2()
-                            .px_4()
-                            .py_3()
-                            .border_b_1()
-                            .border_color(cx.theme().border)
-                            .child(div().font_bold().child(self.tab.title()))
+                        v_flex()
+                            .gap(px(3.))
                             .child(
                                 div()
-                                    .text_sm()
-                                    .text_color(cx.theme().muted_foreground)
+                                    .text_size(px(17.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(self.tab.title()),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.5))
+                                    .text_color(theme::muted())
                                     .child(self.tab.hint()),
                             ),
                     )
-                    .child(div().flex_1().min_h_0().child(body)),
+                    .child(body),
             )
     }
 }
@@ -542,9 +600,10 @@ fn main() {
     let app = gpui_kit::application().with_assets(Assets);
     app.run(move |cx| {
         gpui_kit::init(cx);
+        theme::install(cx);
 
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(None, size(px(1180.), px(760.)), cx)),
+            window_bounds: Some(WindowBounds::centered(None, size(px(1264.), px(861.)), cx)),
             titlebar: Some(TitlebarOptions {
                 title: Some("Artist Toolkit".into()),
                 appears_transparent: false,

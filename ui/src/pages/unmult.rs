@@ -5,11 +5,11 @@
 
 use std::path::PathBuf;
 
-use gpui_kit::component::{button::Button, button::ButtonVariants, checkbox::Checkbox, progress::Progress, *};
+use gpui_kit::component::*;
 use gpui_kit::*;
 use serde_json::json;
 
-use crate::Shell;
+use crate::{Shell, theme, widgets};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
@@ -105,173 +105,182 @@ impl UnmultState {
 
 impl Shell {
     pub(crate) fn unmult_view(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
+        let running = self.unmult.running;
         let picked = if self.unmult.paths.is_empty() {
             "未选择图片".to_string()
         } else {
             format!("已选 {} 张", self.unmult.paths.len())
         };
-        let running = self.unmult.running;
-        let percent = self.unmult.percent();
         let logs: Vec<String> = self
             .unmult
             .logs
             .iter()
             .rev()
-            .take(14)
+            .take(16)
             .rev()
             .cloned()
             .collect();
-        let progress = self.unmult.progress;
         let defringe = self.unmult.defringe;
+        let mode = self.unmult.mode;
+        let rebuild = self.unmult.rebuild_alpha;
+        let no_overwrite = self.unmult.no_overwrite;
+        let out_dir = self.unmult.out_dir.clone();
+
+        let mut mode_seg = widgets::seg_container();
+        for (index, item) in [Mode::Auto, Mode::Black, Mode::White].into_iter().enumerate() {
+            mode_seg = mode_seg.child(widgets::seg_item(
+                ("unmult-mode", index),
+                item.label(),
+                mode == item,
+                !running,
+                cx.listener(move |this, _, _, cx| {
+                    this.unmult.mode = item;
+                    cx.notify();
+                }),
+            ));
+        }
+
+        let mut defringe_row = h_flex().gap(px(8.)).items_center();
+        for (index, strength) in [0.0_f32, 0.5, 1.0].into_iter().enumerate() {
+            defringe_row = defringe_row.child(widgets::chip(
+                ("unmult-defringe", index),
+                if strength == 0.0 {
+                    "关闭".to_string()
+                } else {
+                    format!("{strength:.1}")
+                },
+                (defringe - strength).abs() < f32::EPSILON,
+                !running,
+                cx.listener(move |this, _, _, cx| {
+                    this.unmult.defringe = strength;
+                    cx.notify();
+                }),
+            ));
+        }
+        defringe_row = defringe_row.child(
+            div()
+                .text_size(px(12.))
+                .text_color(theme::muted())
+                .child(if defringe == 0.0 {
+                    "0(关闭)".to_string()
+                } else {
+                    format!("{defringe:.1}")
+                }),
+        );
 
         v_flex()
             .size_full()
             .min_h_0()
-            .gap_3()
-            .p_4()
-            .id("unmult-page")
-            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
-                this.accept_drop(crate::Tab::Unmult, paths.0.to_vec(), cx)
-            }))
-            .child(self.drop_banner(
-                &theme,
-                "拖拽图片到这里(PNG / JPG / TIFF / WebP,可多张),或点「选择图片…」",
-            ))
+            .gap(px(16.))
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
+                widgets::card()
+                    .child(widgets::card_title("1 · 添加图片"))
                     .child(
-                        Button::new("pick-images")
-                            .label("选择图片…")
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.pick_images(cx))),
+                        widgets::dropzone(
+                            "unmult-drop",
+                            "将图片拖到此处,或点击选择(PNG / JPG / TIFF / WebP,可多张)",
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| this.pick_images(cx))),
                     )
                     .child(
-                        div()
-                            .text_sm()
-                            .text_color(theme.muted_foreground)
-                            .child(picked),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("pick-out")
-                            .label("输出目录…")
-                            .disabled(running)
-                            .on_click(cx.listener(|this, _, _, cx| this.pick_output_dir(cx))),
-                    )
-                    .child(
-                        div()
-                            .max_w(px(360.))
-                            .overflow_hidden()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(self.unmult.out_dir.clone()),
+                        h_flex()
+                            .mt(px(12.))
+                            .gap(px(10.))
+                            .items_center()
+                            .child(widgets::button(
+                                "unmult-pick",
+                                "选择图片…",
+                                false,
+                                cx.listener(|this, _, _, cx| this.pick_images(cx)),
+                            ))
+                            .child(widgets::button(
+                                "unmult-clear",
+                                "清空",
+                                false,
+                                cx.listener(|this, _, _, cx| {
+                                    this.unmult.paths.clear();
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(theme::muted())
+                                    .child(picked),
+                            ),
                     ),
             )
             .child(
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(div().text_sm().child("背景:"))
-                    .children([Mode::Auto, Mode::Black, Mode::White].map(|mode| {
-                        Button::new(format!("mode-{}", mode.key()))
-                            .label(mode.label())
-                            .small()
-                            .selected(self.unmult.mode == mode)
-                            .disabled(running)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.unmult.mode = mode;
-                                cx.notify();
-                            }))
-                    }))
-                    .child(div().w(px(16.)))
-                    .child(div().text_sm().child("去边:"))
-                    .children([0.0_f32, 0.5, 1.0].map(|strength| {
-                        Button::new(format!("defringe-{}", (strength * 10.0) as i32))
-                            .label(if strength == 0.0 {
-                                "关闭".to_string()
-                            } else {
-                                format!("{strength:.1}")
-                            })
-                            .small()
-                            .selected((defringe - strength).abs() < f32::EPSILON)
-                            .disabled(running)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.unmult.defringe = strength;
-                                cx.notify();
-                            }))
-                    })),
-            )
-            .child(
-                h_flex()
-                    .gap_5()
-                    .items_center()
+                widgets::card()
+                    .child(widgets::card_title("2 · 处理选项"))
+                    .child(widgets::field("背景模式").child(mode_seg))
+                    .child(widgets::field("边缘清理").mt(px(12.)).child(defringe_row))
                     .child(
-                        Checkbox::new("rebuild-alpha")
-                            .label("重建 Alpha")
-                            .checked(self.unmult.rebuild_alpha)
-                            .disabled(running)
-                            .on_change(cx.listener(|this, checked, _, cx| {
-                                this.unmult.rebuild_alpha = *checked;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("no-overwrite")
-                            .label("跳过已存在的输出")
-                            .checked(self.unmult.no_overwrite)
-                            .disabled(running)
-                            .on_change(cx.listener(|this, checked, _, cx| {
-                                this.unmult.no_overwrite = *checked;
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .mt(px(12.))
+                            .pl(px(84.))
+                            .gap(px(10.))
+                            .child(widgets::check_chip(
+                                "unmult-rebuild",
+                                "忽略输入自带 Alpha,重新计算",
+                                rebuild,
+                                !running,
+                                cx.listener(|this, _, _, cx| {
+                                    this.unmult.rebuild_alpha = !this.unmult.rebuild_alpha;
+                                    cx.notify();
+                                }),
+                            ))
+                            .child(widgets::check_chip(
+                                "unmult-skip",
+                                "输出已存在时跳过",
+                                no_overwrite,
+                                !running,
+                                cx.listener(|this, _, _, cx| {
+                                    this.unmult.no_overwrite = !this.unmult.no_overwrite;
+                                    cx.notify();
+                                }),
+                            )),
                     ),
             )
             .child(
-                h_flex()
-                    .gap_3()
-                    .items_center()
+                widgets::card()
+                    .child(widgets::card_title("3 · 输出路径"))
                     .child(
-                        Button::new("run")
-                            .primary()
-                            .label(if running { "处理中…" } else { "开始" })
-                            .disabled(running || self.unmult.paths.is_empty())
-                            .on_click(cx.listener(|this, _, _, cx| this.run_unmult(cx))),
-                    )
-                    .child(div().flex_1().child(Progress::new("unmult-progress").value(percent)))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(if progress.1 == 0 {
-                                String::new()
-                            } else {
-                                format!("{}/{}", progress.0, progress.1)
-                            }),
+                        widgets::field("输出路径")
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .px(px(10.))
+                                    .py(px(8.))
+                                    .rounded(px(theme::RADIUS))
+                                    .border_1()
+                                    .border_color(theme::border())
+                                    .bg(theme::panel())
+                                    .text_size(px(12.))
+                                    .text_color(theme::muted())
+                                    .overflow_hidden()
+                                    .child(out_dir),
+                            )
+                            .child(widgets::button(
+                                "unmult-out",
+                                "浏览…",
+                                false,
+                                cx.listener(|this, _, _, cx| this.pick_output_dir(cx)),
+                            )),
                     ),
             )
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_h_0()
-                    .gap_1()
-                    .p_3()
-                    .rounded(theme.radius)
-                    .border_1()
-                    .border_color(theme.border)
-                    .bg(theme.muted)
-                    .overflow_hidden()
-                    .children(logs.into_iter().map(|line| {
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(line)
-                    })),
+            .child(widgets::runbar().child(widgets::button(
+                "unmult-run",
+                if running { "处理中…" } else { "开始处理" },
+                true,
+                cx.listener(|this, _, _, cx| this.run_unmult(cx)),
+            )))            .child(
+                widgets::card()
+                    .child(widgets::card_title("运行日志"))
+                    .child(widgets::log_panel(logs)),
             )
     }
-
     pub(crate) fn pick_images(&mut self, cx: &mut Context<Self>) {
         let (tx, rx) = smol::channel::unbounded();
         std::thread::spawn(move || {

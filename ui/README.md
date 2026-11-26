@@ -9,6 +9,19 @@
 用 [gpui-kit](https://github.com/longbridge/gpui-kit)(GPUI 组件库)重写的桌面界面,
 用来替换 Electron 外壳。
 
+## 界面还原(Electron → GPUI)
+
+配色与排版按 `app/renderer/styles.css` 还原(Claude 风:暖米白 `#f5f4ef` + 白卡片 + 珊瑚橙 `#d97757`,13px 基准、10px 圆角):
+
+- `ui/src/theme.rs`:覆盖 gpui-kit 全局主题(背景/边框/主色/圆角/字体),组件与自绘控件共用一套色板
+- `ui/src/widgets.rs`:卡片、卡片标题、按钮(默认/主色)、分段选择、chip、复选 chip、字段行、拖放区、日志面板、运行条
+- 侧边栏 208px 白底 + 品牌圆点 + 纯文本页签(选中珊瑚橙浅底,与 `.nav-btn.active` 一致)
+- 已还原页:图标批处理、去底;其余三页布局待下一轮
+
+原版截图基准在 `docs/reference/electron-*.png`,由 `scripts/capture_reference.py` 通过 DevTools 协议逐页抓取。
+
+已知差异:`圆角半径`/`Defringe` 在原版是滑杆,现在用同参数 chip 组代替;原版「旧版图集拆分 / AI 图集命名」分段里的 AI 流程尚未迁移。
+
 ## 现状
 
 五个页签全部迁移完成,功能与 Electron 版等价:
