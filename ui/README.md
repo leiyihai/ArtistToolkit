@@ -21,7 +21,9 @@
 
 原版截图基准在 `docs/reference/electron-*.png`,由 `scripts/capture_reference.py` 通过 DevTools 协议逐页抓取。
 
-已知差异:`圆角半径`/`Defringe` 在原版是滑杆,现在用同参数 chip 组代替;原版「旧版图集拆分 / AI 图集命名」分段里的 AI 流程尚未迁移。
+已还原:滑杆(`圆角半径` / `Defringe`)、缩略图网格与删除按钮、拖拽高亮、顶部「旧版图集拆分 / AI 图集命名」分段与 AI 命名面板。
+
+仍存在的差异:天空盒页多了一个「自动探测」按钮(原版只有浏览);缩略图删除按钮常显(原版 hover 才显示);AI 命名依赖本机 Codex CLI,没有时后端跳过重命名、保留编号(与原版一致)。
 
 ## 现状
 
@@ -115,4 +117,4 @@ powershell -File scripts\screenshot.ps1 -Out _shot.png
 
 1. 拖拽入队(gpui 文件拖放)、窗口图标定制。
 2. 后端启动偏慢(PyInstaller onefile 解包 + rembg 预导入,首次连接约 20–35 秒),可考虑改 onedir 或连接期间给出更明确的提示。
-3. 可选:把「AI 图集命名」流程(icon_ai_process)也接进来。
+3. 可选:让缩略图删除按钮只在悬停时出现(需要每张图维护 hover 状态)。
