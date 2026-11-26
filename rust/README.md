@@ -1,7 +1,7 @@
 # Rust 内核(rust-anything)
 
 本目录是用 [rust-anything](https://github.com/erkamyaman/rust-anything) 把 ArtistToolkit 的
-纯计算内核逐块移植到 Rust 的产物。**不是**重写整个应用:Electron 界面、Python 编排、
+纯计算内核逐块移植到 Rust 的产物。**不是**重写整个应用:界面、Python 编排、
 PIL/OpenCV/ONNX/Blender 这些「IO 与三方库」继续留在 Python,只把「字节/数字进 → 字节/数字出」
 的纯函数搬到 Rust,行为由录制用例逐值校验。
 

@@ -1,66 +1,58 @@
 # Artist Toolkit
 
-将个人小脚本工具打包成带界面的软件,左侧页签栏可扩展。当前包含:
+个人小脚本工具箱,带原生桌面界面(Rust + GPUI),左侧页签,功能按文件夹自包含。当前包含:
 
-- **图标批处理**:拖入/选择图片 → 抠图去背景 → 自动拆分图标 → 按所选裁切类型(正圆/圆角方形/方形/无=直接缩放)与尺寸(32/64/128/256,可多选)输出,可选"统一图标视觉大小"(normalize)。
-- **AI 抠图**:图片一键去背景,输出透明 PNG。
-- **批量缩放**:递归扫描图片,精确缩放到指定尺寸,保持目录结构。
-- **去底(UnMult)**:去黑底/去白底/自动判断,反预乘恢复直通色,输出透明 PNG(内核已移植到 Rust,见下)。
-- **HDRI 转天空盒**:HDRI 全景图 → Blender 烘焙 → 4×3 网格切图 → 6 个天空盒面(含 bedwars 版),内置 3D 预览(需本地安装 Blender,页面指定路径)。
+- **图标批处理**:拖入/选择图片 → 抠图去背景 → 自动拆分图标 → 按裁切类型(正圆/圆角方形/方形/无=直接缩放)与尺寸(32/64/128/256,可多选)输出,可选"统一图标视觉大小"。
+- **AI 抠图**:图片一键去背景,输出透明 PNG;可选模型(通用 ISNet / 经典 U2Net / 人像精细 BiRefNet)。
+- **批量缩放**:递归扫描图片,精确缩放到指定尺寸(含常用预设),保持目录结构,可取消。
+- **去底(UnMult)**:去黑底/去白底/自动判断,反预乘恢复直通色,输出透明 PNG(像素内核已移植到 Rust)。
+- **HDRI 转天空盒**:HDRI 全景图 → Blender 烘焙 → 4×3 网格切图 → 6 个天空盒面(含 bedwars 版),内置 3D 预览(需本地 Blender,页面指定路径)。
+
+> 旧版 Electron / Tkinter 界面已在 GPUI 版稳定后移除(仍可从 git 历史找回)。
 
 ## 环境要求
 
-- Python ≥ 3.10
+- Python ≥ 3.10(后端依赖:`pip install -r requirements.txt`)
+- Rust 1.97+ 与 MSVC Build Tools(编译界面与 Rust 内核)
 - NVIDIA GPU(可选,有 GPU 自动加速,没 GPU 自动用 CPU)
+- Blender(仅「天空盒烘焙」需要)
 
 ## 安装运行
 
-**默认入口(Rust/GPUI 版界面)**:
-
-双击 `start.vbs`(无控制台窗口)或运行 `start.bat`:
+双击 `start.vbs`(无控制台窗口),或运行 `start.bat`:
 
 ```
 start.vbs     # 直接拉起已构建的界面 exe,不闪控制台
-start.bat     # 命令行入口;缺构建产物时会先 cargo build
+start.bat     # 命令行入口;缺构建产物时会先 cargo build --release
 ```
 
-首次运行如果没有 `dist-gpui\ArtistToolkit.exe`,会先 `cargo build --release`(需要
-[Rust](https://rustup.rs) 与 MSVC Build Tools,约 3-8 分钟;之后秒开)。
-应用本身是 GUI 子系统、Python 后端用 `CREATE_NO_WINDOW` 启动,所以运行期**不会再弹控制台窗口**。
-旧版 Electron 界面保留为 `start-electron.bat`。
+首次运行如果没有 `dist-gpui\ArtistToolkit.exe`,会先 `cargo build --release`(约 3-8 分钟,之后秒开)。
+应用是 GUI 子系统、Python 后端用 `CREATE_NO_WINDOW` 启动,运行期不会弹控制台窗口。
 
-**只跑 Python 后端 / 旧版 Tkinter 界面**:
+开发界面:`cd ui && cargo run`。只跑后端:`python backend.py`(stdio JSON,见 `ui/README.md` 的协议说明)。
 
-```bash
-pip install -r requirements.txt
-python main.py
-```
-
-首次抠图会自动下载 AI 模型(约 1GB,缓存于 `~/.u2net`;仓库 `models/` 有模型时自动使用,免下载)。
+首次抠图会加载 AI 模型(约 1GB,缓存于 `~/.u2net`;仓库 `models/` 有模型时自动使用,免下载)。
 
 ## 使用
 
 1. 把图片拖到界面(或点"选择图片"),可多张
-2. 选裁切类型(单选:正圆/圆角方形/方形/无)与输出尺寸(多选)
-3. 可选勾选"统一图标视觉大小"——裁切后按内容面积统一图标大小(normalize)
-4. 选输出保存路径(默认桌面)
-5. 点"运行"
+2. 选裁切类型(单选)、输出尺寸(多选)、抠图模型(可选)
+3. 可选"统一图标视觉大小"——裁切后按内容面积统一图标大小
+4. 选输出保存路径(默认桌面),点"开始导出"
 
-输出结构(以选"正圆"+"32/128"为例):
+图标批处理的输出结构(以"正圆"+"32/128"为例):
 
 ```
 <输出路径>/
 ├── icons/                    # 拆分出的原始图标(原尺寸)
 └── circle/
-    ├── 32/   图片名_1.png …
-    └── 128/  图片名_1.png …
+    ├── 32/   0001.png …
+    └── 128/  0001.png …
 ```
 
-图片已透明背景时自动跳过抠图,直接拆分。
+图片已是透明背景时自动跳过抠图。
 
 ## 打包成 exe(分享给他人)
-
-**GPUI 版(默认界面)**:
 
 ```bat
 package.bat
@@ -69,69 +61,47 @@ package.bat
 产物:`dist-gpui\ArtistToolkit.exe` + `ArtistToolkit-backend.exe` + `models\` + `tools\img2box\models\`。
 整个目录拷给别人即可运行,对方无需装 Python(后端已打包,含 Rust 内核 `.pyd`);`start.bat` 会优先用它。
 
-**Electron 版(旧界面)**:
-
-```bat
-build.bat
-```
-
-产物:`dist/ArtistToolkit-backend.exe` + `dist-electron\ArtistToolkit-win32-x64\ArtistToolkit.exe`。
-
 ## 项目结构
 
 ```
 ArtistToolkit/
-├── app/                    # Electron 外壳(旧界面,保留对照/回退)
-│   ├── package.json        # npm start 启动开发版
-│   ├── main.js             # 主进程:窗口 + Python 后端进程管理 + IPC
-│   ├── preload.js          # contextBridge 暴露 api(安全桥)
-│   └── renderer/           # 外壳界面(侧边栏页签 + 主题样式)
-│       ├── index.html
-│       ├── styles.css
-│       └── shell.js        # 页签路由:一 TAB 一脚本,registerPage 注册
-├── main.py                 # 旧版 Tkinter GUI 外壳(过渡期保留,入口)
-├── tools/                  # 每个 TAB 页 = 一个自包含功能文件夹
-│   └── icon_export/        # 【图标批处理】页
-│       ├── __init__.py     # 页面类与核心接口的导出
-│       ├── core.py         # 抠图/拆图/裁切核心逻辑(无界面,Python)
-│       ├── backend.py      # stdio JSON 后端:Electron 经子进程调用(进程常驻,模型只加载一次)
-│       ├── frontend/       # 该页 Electron 前端(registerPage 注册)
-│       │   └── view.js
-│       ├── legacy/         # 原单脚本版(备用,逻辑已提炼进 core.py)
-│       │   ├── run.py
-│       │   ├── crop_to_circle.py
-│       │   ├── crop_to_rounded_square.py
-│       │   ├── crop_to_square.py
-│       │   └── normalize_icons.py
-│       └── docs/
-│           └── rembg-api-docs.md
-├── ArtistToolkit.spec      # 旧版 Tkinter GUI 的 PyInstaller 配置
-├── ArtistToolkit-backend.spec  # Python 后端 exe 的 PyInstaller 配置
-├── build.bat               # 打包 Python 后端 exe + 旧版 GUI exe
-├── start.bat               # 命令行启动 GPUI 版界面(缺产物时自动构建)
-├── start.vbs               # 双击启动 GPUI 版界面(无控制台窗口)
-├── ui/                     # Rust/GPUI 桌面前端(gpui-kit),当前默认界面
+├── ui/                     # Rust/GPUI 桌面前端(gpui-kit),默认界面
+│   ├── src/main.rs         # 外壳:侧边栏、页头、后端连接、任务路由
+│   ├── src/theme.rs        # 主题色板(还原原版 Claude 配色)
+│   ├── src/widgets.rs      # 卡片/按钮/分段/chip/缩略图/日志等构件
+│   ├── src/pages/          # 五个页面(一页一模块)
+│   ├── src/backend.rs      # spawn Python 后端、stdio JSON 通信
+│   └── scripts/            # 截图、打包脚本
+├── tools/                  # 每个功能 = 一个自包含文件夹(只有 Python 核心)
+│   ├── icon_export/core.py # 抠图/拆图标/裁切(连通域内核走 Rust)
+│   ├── ai_matting/core.py  # 抠图(模型可选)
+│   ├── image_resize/core.py
+│   ├── unmult/core.py      # 去底(像素内核走 Rust)
+│   ├── img2box/core.py     # Blender 烘焙 + 切图 + 预览服务
+│   └── */tests/            # Rust 与 Python 的差分测试
+├── backend.py              # stdio JSON 聚合后端(所有功能共用一个进程)
+├── ArtistToolkit-backend.spec  # 后端 exe 的 PyInstaller 配置(含 .pyd)
+├── package.bat             # 打包 GPUI 版分发包
+├── start.bat / start.vbs   # 启动入口
 ├── rust/                   # Rust 加速:rust-anything 生成的 crate + 录制用例
-│   ├── unmult-rs/          # 去底像素内核的 Rust 移植(PyO3),含 291 条录制与 REPORT.md
-│   ├── icon-export-rs/     # 图标连通域/外接框的 Rust 移植,含 156 条录制与 REPORT.md
-│   └── PORT_MAP.md         # 移植进度地图(已移植/待移植单位)
+│   ├── unmult-rs/          # 去底像素内核(PyO3),291 条录制 + REPORT.md
+│   ├── icon-export-rs/     # 图标连通域(PyO3),156 条录制 + REPORT.md
+│   └── PORT_MAP.md         # 移植进度地图
 ├── docs/
-│   ├── new-tab-guide.md    # ★ 新增一个 TAB 页的完整指南(照着做即可)
-│   └── rust-migration-plan.md  # rust-anything analyze 生成的迁移计划
+│   ├── rust-migration-plan.md  # rust-anything analyze 生成的迁移计划
+│   └── (其余为历史文档)
 └── requirements.txt
 ```
 
-### 架构:Electron 界面 + Python 抠图引擎
+## 架构:GPUI 界面 + Python 引擎
 
-- **界面(默认)**:Rust + [gpui-kit](https://github.com/longbridge/gpui-kit) 的原生桌面界面(`ui/`),
-  五个页签全部完成;通过 stdio JSON 复用同一个 Python 后端。详见 `ui/README.md`。
-- **界面(旧版)**:Electron(`app/`,Web 技术);每个 TAB 页 = `tools/<name>/frontend/` 一个脚本,
-  经 `registerPage` 注册到外壳。保留用于对照与回退(`start-electron.bat`)。
-- **引擎**:Python(`tools/<name>/core.py`)打包成独立 exe(`dist/ArtistToolkit-backend.exe`),
-  前端 spawn 它,stdio 逐行 JSON 通信,进程常驻(rembg 模型只加载一次)。
-- **开发运行**:GPUI 版 `cd ui && cargo run`;Electron 版 `cd app && npm start`(无后端 exe 时自动退回 `python backend.py`)。
+- **界面**:Rust + [gpui-kit](https://github.com/longbridge/gpui-kit),五个页签;通过 stdio 逐行 JSON 调用后端,
+  界面只做状态渲染,不重复实现业务逻辑。详见 `ui/README.md`。
+- **引擎**:Python(`tools/<name>/core.py`)打包成独立 exe(`dist/ArtistToolkit-backend.exe`),前端 spawn 它,
+  进程常驻(rembg 模型只加载一次)。
+- **任务路由**:界面按 `JobKind` 把后端返回的 `log`/`progress` 送回发起页;一次性查询(如探测 Blender)走同一条通道。
 
-### Rust 加速:去底内核 + 图标拆分
+## Rust 加速
 
 用 [rust-anything](https://github.com/erkamyaman/rust-anything) 把两个纯计算内核移植成 Rust(PyO3),
 Python 接口与界面都不变,`process_batch` 只在内部换成 Rust 实现:
@@ -142,24 +112,33 @@ Python 接口与界面都不变,`process_batch` 只在内部换成 Rust 实现:
 | `segment_component_boxes`(Alpha 连通域 + 外接框,替换 scipy 逐块全图扫描) | `rust/icon-export-rs` | 156 | **约 3.9×**(14.7 µs → 3.8 µs) |
 
 - **行为录制**:用例由 Python 原实现录制(Rust 侧必须逐字节/逐值复现),
-  `rust-anything diff <crate>` 应输出 `291/291`、`156/156`;`rust-anything gate <crate>` 是完成门禁
-  (fmt、clippy、cargo test、无 panic、行为一致)。
+  `rust-anything diff <crate>` 应输出 `291/291`、`156/156`;`rust-anything gate <crate>` 是完成门禁。
 - **差分测试**:`python tools/unmult/tests/test_kernel_parity.py`、
   `python tools/icon_export/tests/test_kernel_parity.py` 在同一进程里比较 Rust 与 Python 两条路径。
 - **开关**:`RUST_ANYTHING_MODE=old`(或 `RUST_ANYTHING_UNIT_<NAME>=original`)回到 Python 实现;
-  打包环境没有 `.pyd` 时也会自动回退,不影响 `build.bat` 产物。
-- **改 Rust 后**:`rust-anything build <crate>` 重新编译(需要 Rust 1.97+ 与 MSVC Build Tools)。
-- **打包**:`ArtistToolkit-backend.spec` 会把两个 `.pyd` 按 `rust/<crate>/python/<module>` 收进
-  PyInstaller 包,所以 `dist/ArtistToolkit-backend.exe` 里同样走 Rust;没编译扩展时自动回退 Python。
-  想确认包内用的是 Rust(缺扩展会直接报错而不是回退):`RUST_ANYTHING_MODE=new dist\ArtistToolkit-backend.exe`。
+  没有 `.pyd` 时也会自动回退。
+- **改 Rust 后**:`rust-anything build <crate>` 重新编译,再 `package.bat` 重打包。
 
-进度与后续单位(批量缩放、抠图、HDRI 切图等)见 `rust/PORT_MAP.md` 与 `docs/rust-migration-plan.md`。
+进度与后续单位见 `rust/PORT_MAP.md` 与 `docs/rust-migration-plan.md`。
 
-### 新增一个 TAB 页
+## 抠图模型
 
-**完整指南见 `docs/new-tab-guide.md`**(三步:写 core → 根 backend.py 注册命令 → index.html 加一行 script + view.js 注册 → 界面调 `window.api`)。
+三处抠图统一支持模型选择,默认 `isnet-general-use`:
 
-核心约定:**一个功能 = `tools/<name>/` 一个自包含文件夹**,外壳 `app/` 只做页签栏和路由,不装功能代码。
+| 模型 | 适合 | 速度 |
+| --- | --- | --- |
+| 通用(ISNet)`isnet-general-use` | 卡通/扁平素材、深色底图集 | 快 |
+| 经典(U2Net)`u2net` | 通用素材 | 快 |
+| 人像精细(BiRefNet)`birefnet-general` | 人像照片,发丝边缘 | 慢(2048×1152 约 20s/张) |
 
-> 旧版 Tkinter GUI(`main.py`)为过渡期保留,Electron 完全接管后移除。
-> 界面设计遵循 frontend-design 技能规范。
+> BiRefNet 会把整块深色底判成前景,卡通图集建议用通用模型。
+
+## 新增一个 TAB 页
+
+1. **核心**:新建 `tools/<name>/core.py`,实现无界面的纯逻辑(PIL/rembg 等都在这一层);
+   需要跨进程的入口函数用 `__all__` 导出。
+2. **后端**:在 `backend.py` 里 import 核心,并在 `main()` 加一个 `cmd` 分支(长任务用线程 + `emit` 回日志/进度)。
+3. **界面**:在 `ui/src/pages/<name>.rs` 写页面状态与视图,`ui/src/main.rs` 的 `Tab` 枚举加一项并路由到它。
+   卡片/按钮/分段等构件直接复用 `ui/src/widgets.rs`。
+
+核心约定:**一个功能 = `tools/<name>/` 一个自包含文件夹**,界面层(`ui/`)只做壳和交互。

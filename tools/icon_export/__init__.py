@@ -1,8 +1,5 @@
-"""图标批处理 TAB 页(工具集的一个功能页,一个文件夹自包含)。
+"""图标批处理模块:核心接口导出(GPUI 版只依赖 core,不再有 Tkinter 页面类)。"""
 
-外部(入口 main.py)只从这里取页面类与核心接口。
-"""
 from .core import CROP_TYPES, process_batch, selftest
-from .page import ExportPage
 
-__all__ = ["CROP_TYPES", "process_batch", "selftest", "ExportPage"]
+__all__ = ["CROP_TYPES", "process_batch", "selftest"]

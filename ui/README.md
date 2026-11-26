@@ -9,11 +9,11 @@
 ![特效抠图页](docs/screenshot.png)
 
 用 [gpui-kit](https://github.com/longbridge/gpui-kit)(GPUI 组件库)重写的桌面界面,
-用来替换 Electron 外壳。
+用来替换原 Electron 外壳(该外壳已随迁移完成移除)。
 
 ## 界面还原(Electron → GPUI)
 
-配色与排版按 `app/renderer/styles.css` 还原(Claude 风:暖米白 `#f5f4ef` + 白卡片 + 珊瑚橙 `#d97757`,13px 基准、10px 圆角):
+配色与排版按原 Electron 版的 `styles.css` 还原(已存档为 `docs/reference/electron-theme.css`)(Claude 风:暖米白 `#f5f4ef` + 白卡片 + 珊瑚橙 `#d97757`,13px 基准、10px 圆角):
 
 - `ui/src/theme.rs`:覆盖 gpui-kit 全局主题(背景/边框/主色/圆角/字体),组件与自绘控件共用一套色板
 - `ui/src/widgets.rs`:卡片、卡片标题、按钮(默认/主色)、分段选择、chip、复选 chip、字段行、拖放区、日志面板、运行条
@@ -41,8 +41,7 @@
 **拖拽**:每页顶部有提示条,把文件直接拖进窗口即可(与 Electron 版一致)——图片页追加图片并按路径去重,
 批量缩放接受文件夹作为输入目录,天空盒取第一张图片作为 HDRI。截图:[去底页拖入 2 张](docs/screenshot-drop.png)。
 
-界面外壳(侧边栏、页签、主题、中文字体、后端连接状态)已完成;Electron 版仍保留
-(`start-electron.bat`),方便对照与回退。
+界面外壳(侧边栏、页签、主题、中文字体、后端连接状态)已完成;旧 Electron/Tkinter 界面已移除。
 
 ## 架构
 
@@ -55,7 +54,7 @@ ui/ (Rust + GPUI)
 
 - 界面不重写业务逻辑:与 Electron 版共用同一套后端协议(`{"id","cmd"}` / `{"id","ok",...}` / `{"id","event":...}`)。
 - 后端启动顺序:优先 `dist/ArtistToolkit-backend.exe`(打包版,含 Rust 内核),否则 `python backend.py`;
-  若仓库内有 `models/birefnet-general.onnx`,会像 Electron 一样设置 `ATK_MODELS_DIR` 免下载模型。
+  若仓库内有 `models/` 下的模型,会自动设置 `ATK_MODELS_DIR` 免下载。
 - 后端输出在后台线程读、经 channel 回到 GPUI 的 async 任务,界面只做状态渲染。
 - 任务用 `JobKind` 标记归属页,后端日志/进度只回到发起它的页面;一次性查询(`Query`)走同一条通道。
 
@@ -74,7 +73,7 @@ cargo build --release         # 发布构建: target\release\artist-toolkit-ui.e
 ```bat
 package.bat        # 构建后端 exe + 组装 dist-gpui\ (前端 + 后端 + 模型)
 start.bat          # 默认启动入口:优先 dist-gpui\ArtistToolkit.exe,其次 release/debug,都没有则自动构建
-start-electron.bat # 旧版 Electron 界面
+
 ```
 
 `dist-gpui\` 整个目录可直接拷给别人:后端是自带 Python 与 Rust 内核的单文件 exe;
